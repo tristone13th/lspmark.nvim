@@ -13,15 +13,19 @@ function M.setup()
 		callback = M.save_bookmarks,
 		pattern = { "*" },
 	})
-	-- include the case when session is loaded since
-	-- that will also change the cwd. Will trigger when vim is launched and load the session
+	-- Include the case when session is loaded since that will also change the cwd.
+	-- Will trigger when vim is launched and load the session
 	vim.api.nvim_create_autocmd({ "DirChanged" }, {
 		callback = function()
 			M.load_bookmarks()
 		end,
 		pattern = { "*" },
 	})
-	vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
+	vim.api.nvim_create_autocmd({ "LspAttach" }, {
+		callback = M.on_buf_enter,
+		pattern = { "*" },
+	})
+	vim.api.nvim_create_autocmd({ "BufEnter" }, {
 		callback = M.on_buf_enter,
 		pattern = { "*" },
 	})
@@ -240,10 +244,10 @@ function M.display_all_bookmarks()
 end
 
 function M.on_buf_enter(event)
-	M.calibrate_bookmarks(event.buf)
+	M.calibrate_bookmarks(event.buf, true)
 end
 
-function M.calibrate_bookmarks(bufnr)
+function M.calibrate_bookmarks(bufnr, async)
 	if bufnr == nil then
 		bufnr = vim.api.nvim_get_current_buf()
 	end
@@ -252,7 +256,6 @@ function M.calibrate_bookmarks(bufnr)
 	if not kinds then
 		return
 	end
-	local new_kinds = {}
 
 	-- flatten all the symbols in bookmarks[file_name]
 	local symbols = {}
@@ -262,49 +265,76 @@ function M.calibrate_bookmarks(bufnr)
 		end
 	end
 	if not vim.tbl_isempty(symbols) then
-		-- request LSP server
-		local params = vim.lsp.util.make_position_params()
-		local result, err = vim.lsp.buf_request_sync(bufnr, "textDocument/documentSymbol", params, 1000)
-		if err then
-			print("Error getting semantic tokens: ", err)
-			return
-		end
-		if not result or vim.tbl_isempty(result) then
-			print("Empty LSP result.")
-			return
-		end
-
-		-- calibrate
-		for client_id, response in pairs(result) do
-			if response.result then
-				for _, symbol in ipairs(response.result) do
-					-- selection range is the same, all need to be modified is following:
-					-- local sr = symbol.selectionRange
-					for _, pre_symbol in ipairs(symbols) do
-						if pre_symbol.name == symbol.name then
-							if not new_kinds[tostring(symbol.kind)] then
-								new_kinds[tostring(symbol.kind)] = {}
-							end
-
-							local r = symbol.range
-							new_kinds[tostring(symbol.kind)][symbol.name] = {
-								r.start.line,
-								r["end"].line,
-								r.start.character,
-								r["end"].character,
-							}
+		local function operate_on_symbols(all_symbols)
+			local new_kinds = {}
+			-- calibrate
+			for _, symbol in ipairs(all_symbols) do
+				-- selection range is the same, all need to be modified is following:
+				-- local sr = symbol.selectionRange
+				if symbol.location then -- SymbolInformation type
+					symbol.range = symbol.location.range
+				end
+				local r = symbol.range
+				for _, pre_symbol in ipairs(symbols) do
+					if pre_symbol.name == symbol.name then
+						if not new_kinds[tostring(symbol.kind)] then
+							new_kinds[tostring(symbol.kind)] = {}
 						end
+
+						new_kinds[tostring(symbol.kind)][symbol.name] = {
+							r.start.line,
+							r["end"].line,
+							r.start.character,
+							r["end"].character,
+						}
 					end
 				end
-			elseif response.error then
-				print("Error from client ID: ", client_id, response.error)
+			end
+			return new_kinds
+		end
+
+		local params = vim.lsp.util.make_position_params()
+		if async then
+			vim.lsp.buf_request(bufnr, "textDocument/documentSymbol", params, function(err, result)
+				if err then
+					vim.api.nvim_err_writeln("Error getting semantic tokens: " .. err.message)
+					return
+				end
+				if not result or vim.tbl_isempty(result) then
+					print("Empty LSP result.")
+					return
+				end
+
+				M.bookmarks[file_name] = operate_on_symbols(result)
+				M.save_bookmarks()
+				M.display_bookmarks(bufnr)
+			end)
+		else
+			local result, err = vim.lsp.buf_request_sync(bufnr, "textDocument/documentSymbol", params, 1000)
+			if err then
+				print("Some errors when getting semantic tokens: ", err)
+				return
+			end
+			if not result or vim.tbl_isempty(result) then
+				print("Empty LSP result.")
+				return
+			end
+
+			-- calibrate
+			for client_id, response in pairs(result) do
+				if response.result then
+					local new_kinds = operate_on_symbols(response.result)
+					M.bookmarks[file_name] = new_kinds
+					M.save_bookmarks()
+					M.display_bookmarks(bufnr)
+				elseif response.error then
+					print("Error from client ID: ", client_id, response.error)
+				end
 			end
 		end
-		M.bookmarks[file_name] = new_kinds
-		M.save_bookmarks()
+	else
+		M.display_bookmarks(bufnr)
 	end
-
-	M.display_bookmarks(bufnr)
 end
 
 function M.load_bookmarks()
