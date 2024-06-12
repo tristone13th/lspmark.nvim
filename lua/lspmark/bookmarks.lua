@@ -13,18 +13,17 @@ function M.setup()
 		callback = M.save_bookmarks,
 		pattern = { "*" },
 	})
+	-- include the case when session is loaded since
+	-- that will also change the cwd. Will trigger when vim is launched and load the session
 	vim.api.nvim_create_autocmd({ "DirChanged" }, {
-		callback = M.load_bookmarks,
-		pattern = { "*" },
-	})
-	vim.api.nvim_create_autocmd({ "BufEnter" }, {
-		callback = M.on_buf_win_enter,
-		pattern = { "*" },
-	})
-	vim.api.nvim_create_autocmd({ "SessionLoadPost" }, {
 		callback = function()
-			M.calibrate_bookmarks(0)
+			M.load_bookmarks()
 		end,
+		pattern = { "*" },
+	})
+	vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
+		callback = M.on_buf_enter,
+		pattern = { "*" },
 	})
 end
 
@@ -240,7 +239,7 @@ function M.display_all_bookmarks()
 	end
 end
 
-function M.on_buf_win_enter(event)
+function M.on_buf_enter(event)
 	M.calibrate_bookmarks(event.buf)
 end
 
@@ -255,7 +254,6 @@ function M.calibrate_bookmarks(bufnr)
 	end
 	local new_kinds = {}
 
-	print(1)
 	-- flatten all the symbols in bookmarks[file_name]
 	local symbols = {}
 	for kind, symbol_table in pairs(kinds) do
