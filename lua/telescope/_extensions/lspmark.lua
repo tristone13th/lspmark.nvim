@@ -10,12 +10,14 @@ local bookmarks = require("lspmark.bookmarks")
 function M.lspmark(opts)
 	opts = opts or {}
 	local results = {}
+	local protocol = vim.lsp.protocol
 
 	for file_name, kinds in pairs(bookmarks.bookmarks) do
-		for _, symbols in pairs(kinds) do
+		for kind, symbols in pairs(kinds) do
 			for name, range in pairs(symbols) do
 				table.insert(results, {
 					filename = file_name,
+					kind = protocol.SymbolKind[tonumber(kind)] or "Unknown",
 					lnum = range[1] + 1,
 					col = range[3],
 					text = name,
@@ -29,16 +31,18 @@ function M.lspmark(opts)
 		finder = finders.new_table({
 			results = results,
 			entry_maker = function(entry)
+				local filename = entry.filename:match("^.+/(.+)$")
 				return {
 					value = entry,
 					display = string.format(
-						"%s:%d:%d: %s",
-						entry.filename:match("^.+/(.+)$"),
+						"%s:%d:%d: [%s] %s",
+						filename,
 						entry.lnum,
 						entry.col,
+						entry.kind,
 						entry.text
 					),
-					ordinal = entry.filename .. entry.lnum .. entry.col,
+					ordinal = entry.text .. entry.kind .. filename,
 					filename = entry.filename,
 					lnum = entry.lnum,
 					col = entry.col,
