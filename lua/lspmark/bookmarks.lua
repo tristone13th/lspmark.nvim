@@ -5,10 +5,6 @@ local utils = require("lspmark.utils")
 M.bookmarks = {}
 
 function M.setup()
-	-- Attach to LSP client
-	-- vim.lsp.handlers["textDocument/semanticTokens/full"] = M.handle_semantic_tokens
-	-- vim.lsp.handlers["textDocument/semanticTokens/range"] = M.handle_semantic_tokens
-
 	vim.api.nvim_create_autocmd({ "DirChangedPre" }, {
 		callback = M.save_bookmarks,
 		pattern = { "*" },
@@ -16,9 +12,7 @@ function M.setup()
 	-- Include the case when session is loaded since that will also change the cwd.
 	-- Will trigger when vim is launched and load the session
 	vim.api.nvim_create_autocmd({ "DirChanged" }, {
-		callback = function()
-			M.load_bookmarks()
-		end,
+		callback = M.load_bookmarks,
 		pattern = { "*" },
 	})
 	vim.api.nvim_create_autocmd({ "LspAttach" }, {
@@ -26,6 +20,10 @@ function M.setup()
 		pattern = { "*" },
 	})
 	vim.api.nvim_create_autocmd({ "BufEnter" }, {
+		callback = M.on_buf_enter,
+		pattern = { "*" },
+	})
+	vim.api.nvim_create_autocmd({ "BufWritePost" }, {
 		callback = M.on_buf_enter,
 		pattern = { "*" },
 	})
