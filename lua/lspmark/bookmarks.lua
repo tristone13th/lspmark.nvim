@@ -215,6 +215,12 @@ end
 
 function M.toggle_bookmark()
 	local symbol = M.get_document_symbol()
+
+	if not symbol then
+		print("Couldn't match a LSP symbol under the cursor.")
+		return
+	end
+
 	if M.has_bookmark(symbol) then
 		M.delete_bookmark(symbol)
 	else
