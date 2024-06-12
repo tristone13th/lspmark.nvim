@@ -17,7 +17,7 @@ function M.setup()
 		callback = M.load_bookmarks,
 		pattern = { "*" },
 	})
-	vim.api.nvim_create_autocmd({ "BufWinEnter" }, {
+	vim.api.nvim_create_autocmd({ "BufEnter" }, {
 		callback = M.on_buf_win_enter,
 		pattern = { "*" },
 	})
@@ -255,6 +255,7 @@ function M.calibrate_bookmarks(bufnr)
 	end
 	local new_kinds = {}
 
+	print(1)
 	-- flatten all the symbols in bookmarks[file_name]
 	local symbols = {}
 	for kind, symbol_table in pairs(kinds) do
@@ -262,50 +263,49 @@ function M.calibrate_bookmarks(bufnr)
 			table.insert(symbols, { name = name, kind = kind, range = range })
 		end
 	end
-	if vim.tbl_isempty(symbols) then
-		return
-	end
+	if not vim.tbl_isempty(symbols) then
+		-- request LSP server
+		local params = vim.lsp.util.make_position_params()
+		local result, err = vim.lsp.buf_request_sync(bufnr, "textDocument/documentSymbol", params, 1000)
+		if err then
+			print("Error getting semantic tokens: ", err)
+			return
+		end
+		if not result or vim.tbl_isempty(result) then
+			print("Empty LSP result.")
+			return
+		end
 
-	-- request LSP server
-	local params = vim.lsp.util.make_position_params()
-	local result, err = vim.lsp.buf_request_sync(bufnr, "textDocument/documentSymbol", params, 1000)
-	if err then
-		print("Error getting semantic tokens: ", err)
-		return
-	end
-	if not result or vim.tbl_isempty(result) then
-		return
-	end
+		-- calibrate
+		for client_id, response in pairs(result) do
+			if response.result then
+				for _, symbol in ipairs(response.result) do
+					-- selection range is the same, all need to be modified is following:
+					-- local sr = symbol.selectionRange
+					for _, pre_symbol in ipairs(symbols) do
+						if pre_symbol.name == symbol.name then
+							if not new_kinds[tostring(symbol.kind)] then
+								new_kinds[tostring(symbol.kind)] = {}
+							end
 
-	-- calibrate
-	for client_id, response in pairs(result) do
-		if response.result then
-			for _, symbol in ipairs(response.result) do
-				-- selection range is the same, all need to be modified is following:
-				-- local sr = symbol.selectionRange
-				for _, pre_symbol in ipairs(symbols) do
-					if pre_symbol.name == symbol.name then
-						if not new_kinds[tostring(symbol.kind)] then
-							new_kinds[tostring(symbol.kind)] = {}
+							local r = symbol.range
+							new_kinds[tostring(symbol.kind)][symbol.name] = {
+								r.start.line,
+								r["end"].line,
+								r.start.character,
+								r["end"].character,
+							}
 						end
-
-						local r = symbol.range
-						new_kinds[tostring(symbol.kind)][symbol.name] = {
-							r.start.line,
-							r["end"].line,
-							r.start.character,
-							r["end"].character,
-						}
 					end
 				end
+			elseif response.error then
+				print("Error from client ID: ", client_id, response.error)
 			end
-		elseif response.error then
-			print("Error from client ID: ", client_id, response.error)
 		end
+		M.bookmarks[file_name] = new_kinds
+		M.save_bookmarks()
 	end
 
-	M.bookmarks[file_name] = new_kinds
-	M.save_bookmarks()
 	M.display_bookmarks(bufnr)
 end
 
