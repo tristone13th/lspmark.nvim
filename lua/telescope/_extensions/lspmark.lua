@@ -6,6 +6,8 @@ local finders = require("telescope.finders")
 local previewers = require("telescope.previewers")
 local sorters = require("telescope.sorters")
 local bookmarks = require("lspmark.bookmarks")
+local highlight = require("telescope._extensions.highlight")
+local entry_display = require("telescope.pickers.entry_display")
 
 function M.lspmark(opts)
 	opts = opts or {}
@@ -16,6 +18,7 @@ function M.lspmark(opts)
 	for file_name, kinds in pairs(bookmarks.bookmarks) do
 		max_file_name_len = math.max(string.len(file_name:match("^.+/(.+)$")), max_file_name_len)
 		for kind, symbols in pairs(kinds) do
+			local kind_hl_group = highlight.symbol_colors[tonumber(kind)]
 			kind = protocol.SymbolKind[tonumber(kind)] or "Unknown"
 			max_kind_len = math.max(string.len(kind), max_kind_len)
 			for name, range in pairs(symbols) do
@@ -23,6 +26,7 @@ function M.lspmark(opts)
 				table.insert(results, {
 					filename = file_name,
 					kind = kind,
+					kind_hl_group = kind_hl_group,
 					lnum = range[1] + 1,
 					col = range[3],
 					text = name,
@@ -31,14 +35,15 @@ function M.lspmark(opts)
 		end
 	end
 
-	local formatted_str = "%-"
-		.. max_file_name_len
-		.. "s:"
-		.. "%4d:%-3d [%-"
-		.. max_kind_len
-		.. "s] %-"
-		.. max_symbol_len
-		.. "s"
+	local display = entry_display.create({
+		separator = "  ",
+		items = {
+			{ width = max_file_name_len },
+			{ width = max_kind_len },
+			{ width = max_symbol_len },
+			{ remaining = true },
+		},
+	})
 
 	pickers.new(opts, {
 		prompt_title = "Bookmarks",
@@ -48,7 +53,13 @@ function M.lspmark(opts)
 				local file_name = entry.filename:match("^.+/(.+)$")
 				return {
 					value = entry,
-					display = string.format(formatted_str, file_name, entry.lnum, entry.col, entry.kind, entry.text),
+					display = function()
+						return display({
+							{ file_name },
+							{ entry.kind, entry.kind_hl_group },
+							{ entry.text },
+						})
+					end,
 					ordinal = entry.text .. entry.kind .. file_name,
 					filename = entry.filename,
 					lnum = entry.lnum,

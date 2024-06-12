@@ -119,6 +119,9 @@ function M.get_document_symbol(bufnr)
 			for _, symbol in ipairs(response.result) do
 				-- selection range is the same, all need to be modified is following:
 				-- local sr = symbol.selectionRange
+				if symbol.location then -- SymbolInformation type
+					symbol.range = symbol.location.range
+				end
 				local r = symbol.range
 
 				if
