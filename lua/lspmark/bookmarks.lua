@@ -38,7 +38,6 @@ function M.setup()
 	})
 	vim.api.nvim_create_autocmd({ "TextYankPost" }, {
 		callback = function()
-			print("func")
 			M.yanked = true
 		end,
 		pattern = { "*" },
@@ -83,42 +82,6 @@ function M.display_bookmarks(bufnr)
 		end
 	end
 end
-
--- function M.get_workspace_token()
--- 	local bufnr = vim.api.nvim_get_current_buf()
--- 	-- local params = { query = symbol.name }
--- 	local params = { query = "get_workspace_token" }
--- 	local result, err = vim.lsp.buf_request_sync(bufnr, "workspace/symbol", params, 1000)
---
--- 	if err then
--- 		print("Error getting workspace/symbol")
--- 		return
--- 	end
---
---
--- 	if not result or vim.tbl_isempty(result) then
--- 		print("No symbols found")
--- 		return
--- 	end
---
--- 	for _, response in pairs(result) do
--- 		if response.result then
--- 			for _, symbol_result in ipairs(response.result) do
--- 				-- if symbol_result.name == symbol.name then
--- 					local res = {}
--- 					print(vim.inspect(symbol_result))
--- 					res.file_path = string.gsub(symbol_result.location.uri, "^[^:]+://", "")
--- 					res.name = symbol_result.name
--- 					res.kind = symbol_result.kind
--- 					return res
--- 				-- end
--- 			end
--- 		end
--- 	end
---
--- 	return nil
--- end
---
 
 function M.get_document_symbol(bufnr)
 	if bufnr == nil then
@@ -326,18 +289,17 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 	end
 	local file_name = vim.api.nvim_buf_get_name(bufnr)
 	local kinds = M.bookmarks[file_name]
-	if not kinds then
-		return
-	end
-
-	-- flatten all the symbols in bookmarks[file_name]
 	local symbols = {}
-	for _, symbol_table in pairs(kinds) do
-		for name, symbol in pairs(symbol_table) do
-			table.insert(symbols, { name = name, marks = symbol.marks, range = symbol.range })
+	if kinds then
+		-- flatten all the symbols in bookmarks[file_name]
+		for _, symbol_table in pairs(kinds) do
+			for name, symbol in pairs(symbol_table) do
+				table.insert(symbols, { name = name, marks = symbol.marks, range = symbol.range })
+			end
 		end
 	end
-	if not vim.tbl_isempty(symbols) or M.process_selection then
+
+	if (not vim.tbl_isempty(symbols)) or M.process_selection then
 		local function operate_on_symbols(all_symbols)
 			local new_kinds = {}
 			-- calibrate
@@ -352,7 +314,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 				-- first process the marks in selection
 				if M.process_selection then
 					for _, mark in ipairs(M.marks_in_selection) do
-						if utils.is_position_in_range(mark.line, r.start.line, r["end"].line) then
+						if mark.line and utils.is_position_in_range(mark.line, r.start.line, r["end"].line) then
 							if not new_kinds[tostring(symbol.kind)] then
 								new_kinds[tostring(symbol.kind)] = {}
 							end
@@ -415,7 +377,6 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 					end
 				end
 			end
-			M.marks_in_selection = {}
 			M.process_selection = false
 			return new_kinds
 		end
@@ -491,6 +452,8 @@ end
 
 function M.delete_line()
 	-- get all bookmarks in the selection
+	M.marks_in_selection = {}
+	M.process_selection = false
 	local bufnr = vim.api.nvim_get_current_buf()
 	local extmarks = vim.fn.sign_getplaced(bufnr, { group = "lspmark" })
 	local cursor = vim.api.nvim_win_get_cursor(0)
@@ -561,7 +524,7 @@ end
 function M.paste_text()
 	if not M.yanked then
 		local cursor = vim.api.nvim_win_get_cursor(0)
-		vim.api.nvim_put(split_text(M.text), M.mode, true, true)
+		vim.api.nvim_put(split_text(M.text), M.mode, true, false)
 		for _, mark in ipairs(M.marks_in_selection) do
 			if M.mode == "l" then
 				mark.line = mark.offset_in_selection + cursor[1] + 1
@@ -581,6 +544,8 @@ function M.paste_text()
 end
 
 function M.delete_visual_selection()
+	M.marks_in_selection = {}
+	M.process_selection = false
 	M.text = get_visual_selection()
 	vim.cmd('normal! gv"') -- Re-select the last selected text
 	vim.cmd('normal! "_d') -- Delete the selected text without affecting registers
