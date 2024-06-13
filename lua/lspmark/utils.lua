@@ -19,14 +19,8 @@ function M.directory_exists(path)
 	return ok
 end
 
-function M.is_position_in_range(line, character, start_line, end_line, start_character, end_character)
-	if line > start_line and line < end_line then
-		return true
-	elseif line == start_line and line == end_line and character >= start_character and character < end_character then
-		return true
-	elseif line == start_line and character >= start_character then
-		return true
-	elseif line == end_line and character < end_character then
+function M.is_position_in_range(line, start_line, end_line)
+	if line >= start_line and line <= end_line then
 		return true
 	end
 	return false
