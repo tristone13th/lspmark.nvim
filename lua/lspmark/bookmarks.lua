@@ -38,6 +38,7 @@ function M.setup()
 	})
 	vim.api.nvim_create_autocmd({ "TextYankPost" }, {
 		callback = function()
+			print("func")
 			M.yanked = true
 		end,
 		pattern = { "*" },
@@ -504,7 +505,7 @@ function M.delete_line()
 	local lines = vim.api.nvim_buf_get_lines(0, cursor[1] - 1, cursor[1], false)
 	M.mode = "l"
 	M.text = lines[1]
-	vim.api.nvim_feedkeys("dd", "n", true)
+	vim.api.nvim_buf_set_lines(bufnr, cursor[1] - 1, cursor[1], false, {})
 	M.yanked = false
 end
 
