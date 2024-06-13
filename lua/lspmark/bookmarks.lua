@@ -550,17 +550,18 @@ local function get_visual_selection()
 end
 
 local function split_text(text)
-	local lines = {}
-	for line in text:gmatch("([^\n]*)\n?") do
-		table.insert(lines, line)
+	local sep = "\n"
+	local t = {}
+	for str in string.gmatch(text, "([^" .. sep .. "]+)") do
+		table.insert(t, str)
 	end
-	return lines
+	return t
 end
 
 function M.paste_text()
 	if not M.yanked then
 		local cursor = vim.api.nvim_win_get_cursor(0)
-		vim.api.nvim_put(split_text(M.text), M.mode, true, false)
+		vim.api.nvim_put(split_text(M.text), M.mode, true, true)
 		for _, mark in ipairs(M.marks_in_selection) do
 			if M.mode == "l" then
 				mark.line = mark.offset_in_selection + cursor[1] + 1
