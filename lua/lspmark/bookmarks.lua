@@ -7,6 +7,7 @@ M.text = nil
 M.yanked = false
 M.marks_in_selection = {}
 M.mode = "c"
+M.process_selection = false
 
 function M.setup()
 	vim.api.nvim_create_autocmd({ "DirChangedPre" }, {
@@ -335,7 +336,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 			table.insert(symbols, { name = name, marks = symbol.marks, range = symbol.range })
 		end
 	end
-	if not vim.tbl_isempty(symbols) or not vim.tbl_isempty(M.marks_in_selection) then
+	if not vim.tbl_isempty(symbols) or M.process_selection then
 		local function operate_on_symbols(all_symbols)
 			local new_kinds = {}
 			-- calibrate
@@ -348,27 +349,29 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 				local r = symbol.range
 
 				-- first process the marks in selection
-				for _, mark in ipairs(M.marks_in_selection) do
-					if utils.is_position_in_range(mark.line, r.start.line, r["end"].line) then
-						if not new_kinds[tostring(symbol.kind)] then
-							new_kinds[tostring(symbol.kind)] = {}
-						end
-						local new_symbols = new_kinds[tostring(symbol.kind)]
-						if not new_symbols[symbol.name] then
-							new_symbols[symbol.name] = { marks = {} }
-						end
+				if M.process_selection then
+					for _, mark in ipairs(M.marks_in_selection) do
+						if utils.is_position_in_range(mark.line, r.start.line, r["end"].line) then
+							if not new_kinds[tostring(symbol.kind)] then
+								new_kinds[tostring(symbol.kind)] = {}
+							end
+							local new_symbols = new_kinds[tostring(symbol.kind)]
+							if not new_symbols[symbol.name] then
+								new_symbols[symbol.name] = { marks = {} }
+							end
 
-						local new_marks = new_symbols[symbol.name]
-						new_marks.range = {
-							r.start.line,
-							r["end"].line,
-							r.start.character,
-							r["end"].character,
-						}
+							local new_marks = new_symbols[symbol.name]
+							new_marks.range = {
+								r.start.line,
+								r["end"].line,
+								r.start.character,
+								r["end"].character,
+							}
 
-						local new_offset = mark.line - r.start.line - 1
-						local text = vim.api.nvim_buf_get_lines(bufnr, mark.line - 1, mark.line, false)[1]
-						new_marks.marks[tostring(new_offset)] = { col = 0, text = text }
+							local new_offset = mark.line - r.start.line - 1
+							local text = vim.api.nvim_buf_get_lines(bufnr, mark.line - 1, mark.line, false)[1]
+							new_marks.marks[tostring(new_offset)] = { col = 0, text = text }
+						end
 					end
 				end
 
@@ -412,6 +415,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 				end
 			end
 			M.marks_in_selection = {}
+			M.process_selection = false
 			return new_kinds
 		end
 
@@ -484,6 +488,26 @@ local function delete_id(bufnr, id)
 	end
 end
 
+function M.delete_line()
+	-- get all bookmarks in the selection
+	local bufnr = vim.api.nvim_get_current_buf()
+	local extmarks = vim.fn.sign_getplaced(bufnr, { group = "lspmark" })
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	for _, marks in ipairs(extmarks) do
+		for _, sign in ipairs(marks.signs) do
+			if utils.is_position_in_range(sign.lnum, cursor[1], cursor[1]) then
+				table.insert(M.marks_in_selection, { offset_in_selection = 0 })
+				delete_id(bufnr, sign.id)
+			end
+		end
+	end
+	local lines = vim.api.nvim_buf_get_lines(0, cursor[1] - 1, cursor[1], false)
+	M.mode = "l"
+	M.text = lines[1]
+	vim.api.nvim_feedkeys("dd", "n", true)
+	M.yanked = false
+end
+
 local function get_visual_selection()
 	local s_start = vim.fn.getpos("'<")
 	local s_end = vim.fn.getpos("'>")
@@ -495,10 +519,6 @@ local function get_visual_selection()
 	-- get all bookmarks in the selection
 	local bufnr = vim.api.nvim_get_current_buf()
 	local extmarks = vim.fn.sign_getplaced(bufnr, { group = "lspmark" })
-	local file_name = vim.api.nvim_buf_get_name(bufnr)
-	if not M.bookmarks[file_name] then
-		return
-	end
 
 	for _, marks in ipairs(extmarks) do
 		for _, sign in ipairs(marks.signs) do
@@ -538,11 +558,21 @@ end
 
 function M.paste_text()
 	if not M.yanked then
-		vim.api.nvim_put(split_text(M.text), M.mode, true, false)
 		local cursor = vim.api.nvim_win_get_cursor(0)
+		vim.api.nvim_put(split_text(M.text), M.mode, true, false)
 		for _, mark in ipairs(M.marks_in_selection) do
-			mark.line = mark.offset_in_selection + cursor[1]
+			if M.mode == "l" then
+				mark.line = mark.offset_in_selection + cursor[1] + 1
+			else
+				mark.line = mark.offset_in_selection + cursor[1]
+			end
 		end
+		if not vim.tbl_isempty(M.marks_in_selection) then
+			M.process_selection = true
+		else
+			M.process_selection = false
+		end
+		vim.cmd("silent! w")
 	else
 		vim.cmd("normal! p")
 	end
