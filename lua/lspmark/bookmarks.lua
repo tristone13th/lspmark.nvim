@@ -44,7 +44,7 @@ function M.display_bookmarks(bufnr)
 		return
 	end
 
-	local sign_name = "SymbolIcon"
+	local sign_name = "lspmark_symbol"
 	local icon = "🚩"
 
 	if vim.fn.sign_getdefined(sign_name) == nil or #vim.fn.sign_getdefined(sign_name) == 0 then
@@ -52,9 +52,17 @@ function M.display_bookmarks(bufnr)
 	end
 
 	for _, symbols in pairs(M.bookmarks[file_name]) do
-		for _, range in pairs(symbols) do
-			local start_line = range[1] + 1 -- Convert to 1-based indexing
-			vim.fn.sign_place(0, icon_group, sign_name, bufnr, { lnum = start_line, priority = 10 })
+		for _, symbol in pairs(symbols) do
+			local start_line = symbol.range[1] -- Convert to 1-based indexing
+			for offset, _ in pairs(symbol.marks) do
+				vim.fn.sign_place(
+					0,
+					icon_group,
+					sign_name,
+					bufnr,
+					{ lnum = start_line + tonumber(offset), priority = 10 }
+				)
+			end
 		end
 	end
 end
@@ -157,17 +165,29 @@ function M.create_bookmark(symbol)
 		M.bookmarks[file_name] = {}
 	end
 
-	if not M.bookmarks[file_name][tostring(symbol.kind)] then
-		M.bookmarks[file_name][tostring(symbol.kind)] = {}
+	local l1 = M.bookmarks[file_name]
+	if not l1[tostring(symbol.kind)] then
+		l1[tostring(symbol.kind)] = {}
 	end
 
-	local r = symbol.range
-	M.bookmarks[file_name][tostring(symbol.kind)][symbol.name] = {
-		r.start.line,
-		r["end"].line,
-		r.start.character,
-		r["end"].character,
-	}
+	local l2 = l1[tostring(symbol.kind)]
+	if not l2[symbol.name] then
+		local r = symbol.range
+		l2[symbol.name] = {
+			range = {
+				r.start.line,
+				r["end"].line,
+				r.start.character,
+				r["end"].character,
+			},
+			marks = {},
+		}
+	end
+
+	local l3 = l2[symbol.name]
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local offset, character = cursor[1] - l3.range[1], cursor[2]
+	l3.marks[tostring(offset)] = character
 
 	M.save_bookmarks()
 	M.display_bookmarks(0)
@@ -184,11 +204,23 @@ function M.delete_bookmark(symbol)
 		return
 	end
 
-	if not M.bookmarks[file_name][tostring(symbol.kind)] then
+	local l1 = M.bookmarks[file_name]
+	if not l1[tostring(symbol.kind)] then
 		return
 	end
 
-	M.bookmarks[file_name][tostring(symbol.kind)][symbol.name] = nil
+	local l2 = l1[tostring(symbol.kind)]
+	if not l2[symbol.name] then
+		return
+	end
+
+	local l3 = l2[symbol.name]
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local offset = cursor[1] - l3.range[1]
+	l3.marks[tostring(offset)] = nil
+	if vim.tbl_isempty(l3.marks) then
+		l2[symbol.name] = nil
+	end
 
 	M.save_bookmarks()
 	M.display_bookmarks(0)
@@ -198,23 +230,28 @@ end
 function M.has_bookmark(symbol)
 	local file_path = vim.api.nvim_buf_get_name(0)
 	-- We suppose all the boobmarks are up-to-date
-	local bookmarks_file = M.bookmarks[file_path]
-
-	if not bookmarks_file then
+	local l1 = M.bookmarks[file_path]
+	if not l1 then
 		return false
 	end
 
-	local bookmarks_kind = bookmarks_file[tostring(symbol.kind)]
-
-	if not bookmarks_kind then
+	local l2 = l1[tostring(symbol.kind)]
+	if not l2 then
 		return false
 	end
 
-	if bookmarks_kind[symbol.name] then
-		return true
+	local l3 = l2[symbol.name]
+	if not l3 then
+		return false
 	end
 
-	return false
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local offset = cursor[1] - l3.range[1]
+	if not l3.marks[tostring(offset)] then
+		return false
+	end
+
+	return true
 end
 
 function M.toggle_bookmark()
@@ -232,14 +269,14 @@ function M.toggle_bookmark()
 	end
 end
 
-function M.display_all_bookmarks()
-	for file_name, _ in pairs(M.bookmarks) do
-		local buffers = utils.get_buffers_for_file(file_name)
-		for _, bufnr in ipairs(buffers) do
-			M.display_bookmarks(bufnr)
-		end
-	end
-end
+-- function M.display_all_bookmarks()
+-- 	for file_name, _ in pairs(M.bookmarks) do
+-- 		local buffers = utils.get_buffers_for_file(file_name)
+-- 		for _, bufnr in ipairs(buffers) do
+-- 			M.display_bookmarks(bufnr)
+-- 		end
+-- 	end
+-- end
 
 function M.on_buf_enter(event)
 	M.calibrate_bookmarks(event.buf, true)
@@ -257,9 +294,9 @@ function M.calibrate_bookmarks(bufnr, async)
 
 	-- flatten all the symbols in bookmarks[file_name]
 	local symbols = {}
-	for kind, symbol_table in pairs(kinds) do
-		for name, range in pairs(symbol_table) do
-			table.insert(symbols, { name = name, kind = kind, range = range })
+	for _, symbol_table in pairs(kinds) do
+		for name, symbol in pairs(symbol_table) do
+			table.insert(symbols, { name = name, marks = symbol.marks })
 		end
 	end
 	if not vim.tbl_isempty(symbols) then
@@ -279,12 +316,17 @@ function M.calibrate_bookmarks(bufnr, async)
 							new_kinds[tostring(symbol.kind)] = {}
 						end
 
-						new_kinds[tostring(symbol.kind)][symbol.name] = {
+						if not new_kinds[tostring(symbol.kind)][symbol.name] then
+							new_kinds[tostring(symbol.kind)][symbol.name] = {}
+						end
+
+						new_kinds[tostring(symbol.kind)][symbol.name].range = {
 							r.start.line,
 							r["end"].line,
 							r.start.character,
 							r["end"].character,
 						}
+						new_kinds[tostring(symbol.kind)][symbol.name].marks = pre_symbol.marks
 					end
 				end
 			end
