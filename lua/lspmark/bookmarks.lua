@@ -3,6 +3,9 @@ local persistence = require("lspmark.persistence")
 local utils = require("lspmark.utils")
 
 M.bookmarks = {}
+M.text = nil
+M.yanked = false
+M.marks_in_selection = {}
 
 function M.setup()
 	vim.api.nvim_create_autocmd({ "DirChangedPre" }, {
@@ -15,16 +18,26 @@ function M.setup()
 		callback = M.load_bookmarks,
 		pattern = { "*" },
 	})
+	-- Lazy calibration
 	vim.api.nvim_create_autocmd({ "LspAttach" }, {
 		callback = M.on_buf_enter,
 		pattern = { "*" },
 	})
-	vim.api.nvim_create_autocmd({ "BufEnter" }, {
-		callback = M.on_buf_enter,
+	-- When jumping from telescope to a buffer, LspAttach
+	-- and BufEnter will be triggered simultaneously and make
+	-- a chaos, so comment this.
+	-- vim.api.nvim_create_autocmd({ "BufEnter" }, {
+	-- 	callback = M.on_buf_enter,
+	-- 	pattern = { "*" },
+	-- })
+	vim.api.nvim_create_autocmd({ "BufWritePost" }, {
+		callback = M.on_buf_write_post,
 		pattern = { "*" },
 	})
-	vim.api.nvim_create_autocmd({ "BufWritePost" }, {
-		callback = M.on_buf_enter,
+	vim.api.nvim_create_autocmd({ "TextYankPost" }, {
+		callback = function()
+			M.yanked = true
+		end,
 		pattern = { "*" },
 	})
 end
@@ -54,14 +67,15 @@ function M.display_bookmarks(bufnr)
 	for _, symbols in pairs(M.bookmarks[file_name]) do
 		for _, symbol in pairs(symbols) do
 			local start_line = symbol.range[1] -- Convert to 1-based indexing
-			for offset, _ in pairs(symbol.marks) do
-				vim.fn.sign_place(
+			for offset, mark in pairs(symbol.marks) do
+				local id = vim.fn.sign_place(
 					0,
 					icon_group,
 					sign_name,
 					bufnr,
-					{ lnum = start_line + tonumber(offset), priority = 10 }
+					{ lnum = start_line + tonumber(offset) + 1, priority = 10 }
 				)
+				mark.id = id
 			end
 		end
 	end
@@ -186,8 +200,8 @@ function M.create_bookmark(symbol)
 
 	local l3 = l2[symbol.name]
 	local cursor = vim.api.nvim_win_get_cursor(0)
-	local offset, character = cursor[1] - l3.range[1], cursor[2]
-	l3.marks[tostring(offset)] = { character, vim.api.nvim_get_current_line() }
+	local offset, character = cursor[1] - l3.range[1] - 1, cursor[2]
+	l3.marks[tostring(offset)] = { col = character, text = vim.api.nvim_get_current_line() }
 
 	M.save_bookmarks()
 	M.display_bookmarks(0)
@@ -216,7 +230,7 @@ function M.delete_bookmark(symbol)
 
 	local l3 = l2[symbol.name]
 	local cursor = vim.api.nvim_win_get_cursor(0)
-	local offset = cursor[1] - l3.range[1]
+	local offset = cursor[1] - l3.range[1] - 1
 	l3.marks[tostring(offset)] = nil
 	if vim.tbl_isempty(l3.marks) then
 		l2[symbol.name] = nil
@@ -228,7 +242,8 @@ end
 
 -- Do we have a bookmark in current cursor?
 function M.has_bookmark(symbol)
-	local file_path = vim.api.nvim_buf_get_name(0)
+	local bufnr = vim.api.nvim_get_current_buf()
+	local file_path = vim.api.nvim_buf_get_name(bufnr)
 	-- We suppose all the boobmarks are up-to-date
 	local l1 = M.bookmarks[file_path]
 	if not l1 then
@@ -246,7 +261,19 @@ function M.has_bookmark(symbol)
 	end
 
 	local cursor = vim.api.nvim_win_get_cursor(0)
-	local offset = cursor[1] - l3.range[1]
+	-- The following cover the case when we want to toggle a bookmark
+	-- and the buffer is modified, it is a corner case, so comment this.
+	-- local extmarks = vim.fn.sign_getplaced(bufnr, { group = "lspmark" })
+	--
+	-- for _, marks in ipairs(extmarks) do
+	-- 	for _, sign in ipairs(marks.signs) do
+	-- 		if sign.lnum == cursor[1] then
+	-- 			return true
+	-- 		end
+	-- 	end
+	-- end
+	--
+	local offset = cursor[1] - l3.range[1] - 1
 	if not l3.marks[tostring(offset)] then
 		return false
 	end
@@ -255,6 +282,13 @@ function M.has_bookmark(symbol)
 end
 
 function M.toggle_bookmark()
+	local bufnr = vim.api.nvim_get_current_buf()
+
+	if vim.api.nvim_get_option_value("modified", { buf = bufnr }) then
+		print("Could toggle bookmark, please save the buffer first.")
+		return
+	end
+
 	local symbol = M.get_document_symbol()
 
 	if not symbol then
@@ -279,10 +313,20 @@ end
 -- end
 
 function M.on_buf_enter(event)
-	M.calibrate_bookmarks(event.buf, true)
+	M.lsp_calibrate_bookmarks(event.buf, true)
 end
 
-function M.calibrate_bookmarks(bufnr, async)
+function M.on_buf_write_post(event)
+	M.lsp_calibrate_bookmarks(event.buf, true)
+end
+
+-- We store each mark in a relative way, so we don't need
+-- to modify the offset value. What we need is updated the
+-- text information and the start line of each LSP symbol.
+-- Also delete the marks if their symbol is deleted.
+-- lsp.format() can only affect the marks in the formated symbols,
+-- Let's hope we do format frequently so each time the file is not huge-changed.
+function M.lsp_calibrate_bookmarks(bufnr, async)
 	if bufnr == nil then
 		bufnr = vim.api.nvim_get_current_buf()
 	end
@@ -296,7 +340,7 @@ function M.calibrate_bookmarks(bufnr, async)
 	local symbols = {}
 	for _, symbol_table in pairs(kinds) do
 		for name, symbol in pairs(symbol_table) do
-			table.insert(symbols, { name = name, marks = symbol.marks })
+			table.insert(symbols, { name = name, marks = symbol.marks, range = symbol.range })
 		end
 	end
 	if not vim.tbl_isempty(symbols) then
@@ -329,11 +373,23 @@ function M.calibrate_bookmarks(bufnr, async)
 							r["end"].character,
 						}
 
+						-- calibrate offset based on new start line and the sign
 						new_marks.marks = {}
 						for offset, mark in pairs(pre_symbol.marks) do
-							local line = tonumber(offset) + r.start.line
+							local sign = utils.get_sign_from_id(bufnr, mark.id)
+							-- may because lsp.format(), let's use old offset
+							local new_offset, line
+							-- r.start and r.end are start from 0, so plus 1
+							-- sign == nil when formatting
+							if not sign then
+								line = math.max(math.min(tonumber(offset) + r.start.line, r["end"].line), r.start.line)
+									+ 1
+							else
+								line = math.max(math.min(sign.lnum, r["end"].line + 1), r.start.line + 1)
+							end
+							new_offset = line - r.start.line - 1
 							local text = vim.api.nvim_buf_get_lines(bufnr, line - 1, line, false)[1]
-							new_marks.marks[offset] = { mark.character, text }
+							new_marks.marks[tostring(new_offset)] = { col = mark.character, text = text }
 						end
 					end
 				end
@@ -383,6 +439,45 @@ function M.calibrate_bookmarks(bufnr, async)
 	else
 		M.display_bookmarks(bufnr)
 	end
+end
+
+-- When the change to file is not saved to disk, Lsp is not tiggered so
+-- signs are the most updated information refer. Calibrate the offset information
+-- for each mark. But actually, we don't know if a LSP symbol is deleted or not,
+-- so we keep the
+function M.sign_calibrate_bookmarks(bufnr)
+	if bufnr == 0 then
+		bufnr = vim.api.nvim_get_current_buf()
+	end
+	local file_name = vim.api.nvim_buf_get_name(bufnr)
+
+	local l1 = M.bookmarks[file_name]
+	if not l1 then
+		return
+	end
+
+	local extmarks = vim.fn.sign_getplaced(bufnr, { group = "lspmark" })
+
+	-- A mark's symbol may be deleted, if so, delete the mark.
+	local new_marks = {}
+	for _, marks in ipairs(extmarks) do
+		for _, sign in ipairs(marks.signs) do
+			for kind, symbols in pairs(l1) do
+				for name, symbol in pairs(symbols) do
+					for offset, mark in pairs(symbol.marks) do
+						if mark.id == sign.id then
+							new_marks[kind] = col
+							break
+						end
+					end
+				end
+			end
+		end
+	end
+
+	M.bookmarks[file_name] = new_marks
+	M.save_bookmarks()
+	M.display_bookmarks(bufnr)
 end
 
 function M.load_bookmarks()

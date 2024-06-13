@@ -24,17 +24,18 @@ function M.lspmark(opts)
 			for name, symbol in pairs(symbols) do
 				max_symbol_len = math.max(string.len(name), max_symbol_len)
 				for offset, mark in pairs(symbol.marks) do
-					max_line_len = math.max(string.len(mark[2]), max_line_len)
+					local text = mark.text:match("^%s*(.-)%s*$")
+					max_line_len = math.max(string.len(text), max_line_len)
 					table.insert(results, {
 						filename = file_name,
 						kind = kind,
 						kind_str = kind_str,
 						kind_hl_group = kind_hl_group,
-						lnum = symbol.range[1] + tonumber(offset),
+						lnum = symbol.range[1] + tonumber(offset) + 1,
 						offset = offset,
 						col = symbol.range[3],
 						symbol = name,
-						text = mark[2]:match("^%s*(.-)%s*$"),
+						text = text,
 					})
 				end
 			end

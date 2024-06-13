@@ -50,4 +50,12 @@ function M.get_buffers_for_file(file_path)
 	return matching_buffers
 end
 
+function M.get_sign_from_id(bufnr, id)
+	local signs = vim.fn.sign_getplaced(bufnr, { group = "lspmark", id = id })
+	if #signs == 0 or #signs[1].signs == 0 then
+		return nil
+	end
+	return signs[1].signs[1]
+end
+
 return M
