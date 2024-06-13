@@ -14,24 +14,29 @@ function M.lspmark(opts)
 	local results = {}
 	local protocol = vim.lsp.protocol
 
-	local max_file_name_len, max_kind_len, max_symbol_len = 0, 0, 0
+	local max_file_name_len, max_kind_len, max_symbol_len, max_line_len = 0, 0, 0, 0
 	for file_name, kinds in pairs(bookmarks.bookmarks) do
 		max_file_name_len = math.max(string.len(file_name:match("^.+/(.+)$")), max_file_name_len)
 		for kind, symbols in pairs(kinds) do
 			local kind_hl_group = highlight.symbol_colors[tonumber(kind)]
 			local kind_str = protocol.SymbolKind[tonumber(kind)] or "Unknown"
 			max_kind_len = math.max(string.len(kind_str), max_kind_len)
-			for name, range in pairs(symbols) do
+			for name, symbol in pairs(symbols) do
 				max_symbol_len = math.max(string.len(name), max_symbol_len)
-				table.insert(results, {
-					filename = file_name,
-					kind = kind,
-					kind_str = kind_str,
-					kind_hl_group = kind_hl_group,
-					lnum = range[1] + 1,
-					col = range[3],
-					text = name,
-				})
+				for offset, mark in pairs(symbol.marks) do
+					max_line_len = math.max(string.len(mark[2]), max_line_len)
+					table.insert(results, {
+						filename = file_name,
+						kind = kind,
+						kind_str = kind_str,
+						kind_hl_group = kind_hl_group,
+						lnum = symbol.range[1] + tonumber(offset),
+						offset = offset,
+						col = symbol.range[3],
+						symbol = name,
+						text = mark[2]:match("^%s*(.-)%s*$"),
+					})
+				end
 			end
 		end
 	end
@@ -42,6 +47,7 @@ function M.lspmark(opts)
 			{ width = max_file_name_len },
 			{ width = max_kind_len },
 			{ width = max_symbol_len },
+			{ width = max_line_len },
 			{ remaining = true },
 		},
 	})
@@ -57,15 +63,18 @@ function M.lspmark(opts)
 						return display({
 							{ file_name },
 							{ entry.kind_str, entry.kind_hl_group },
+							{ entry.symbol },
 							{ entry.text },
 						})
 					end,
-					ordinal = entry.text .. entry.kind_str .. file_name,
+					ordinal = entry.text .. entry.symbol .. entry.kind_str .. file_name,
 					filename = entry.filename,
 					lnum = entry.lnum,
 					col = entry.col,
 					kind = entry.kind,
-					name = entry.text,
+					symbol = entry.symbol,
+					offset = entry.offset,
+					text = entry.text,
 				}
 			end,
 		}),
@@ -83,7 +92,10 @@ function M.lspmark(opts)
 				local s = action_state.get_selected_entry()
 				local kinds = bookmarks.bookmarks[s.filename]
 				local symbol = kinds[s.kind]
-				symbol[s.name] = nil
+				symbol[s.symbol].marks[tostring(s.offset)] = nil
+				if vim.tbl_isempty(symbol[s.symbol].marks) then
+					symbol[s.symbol] = nil
+				end
 				bookmarks.save_bookmarks()
 				local current_picker = action_state.get_current_picker(prompt_bufnr)
 				current_picker:delete_selection(function() end)

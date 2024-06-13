@@ -187,7 +187,7 @@ function M.create_bookmark(symbol)
 	local l3 = l2[symbol.name]
 	local cursor = vim.api.nvim_win_get_cursor(0)
 	local offset, character = cursor[1] - l3.range[1], cursor[2]
-	l3.marks[tostring(offset)] = character
+	l3.marks[tostring(offset)] = { character, vim.api.nvim_get_current_line() }
 
 	M.save_bookmarks()
 	M.display_bookmarks(0)
@@ -316,17 +316,25 @@ function M.calibrate_bookmarks(bufnr, async)
 							new_kinds[tostring(symbol.kind)] = {}
 						end
 
-						if not new_kinds[tostring(symbol.kind)][symbol.name] then
-							new_kinds[tostring(symbol.kind)][symbol.name] = {}
+						local new_symbols = new_kinds[tostring(symbol.kind)]
+						if not new_symbols[symbol.name] then
+							new_symbols[symbol.name] = {}
 						end
 
-						new_kinds[tostring(symbol.kind)][symbol.name].range = {
+						local new_marks = new_symbols[symbol.name]
+						new_marks.range = {
 							r.start.line,
 							r["end"].line,
 							r.start.character,
 							r["end"].character,
 						}
-						new_kinds[tostring(symbol.kind)][symbol.name].marks = pre_symbol.marks
+
+						new_marks.marks = {}
+						for offset, mark in pairs(pre_symbol.marks) do
+							local line = tonumber(offset) + r.start.line
+							local text = vim.api.nvim_buf_get_lines(bufnr, line - 1, line, false)[1]
+							new_marks.marks[offset] = { mark.character, text }
+						end
 					end
 				end
 			end
