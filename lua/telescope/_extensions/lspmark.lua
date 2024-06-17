@@ -91,7 +91,7 @@ function M.lspmark(opts)
 
 			actions.close:enhance({
 				post = function()
-					bookmarks.display_bookmarks()
+					bookmarks.display_bookmarks(0)
 				end,
 			})
 
