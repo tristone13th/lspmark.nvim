@@ -89,14 +89,35 @@ function M.lspmark(opts)
 				vim.api.nvim_win_set_cursor(0, { selection.lnum, selection.col - 1 })
 			end)
 
+			actions.close:enhance({
+				post = function()
+					bookmarks.display_bookmarks()
+				end,
+			})
+
 			map("n", "d", function()
 				local s = action_state.get_selected_entry()
 				local kinds = bookmarks.bookmarks[s.filename]
-				local symbol = kinds[s.kind]
-				symbol[s.symbol].marks[tostring(s.offset)] = nil
-				if vim.tbl_isempty(symbol[s.symbol].marks) then
-					symbol[s.symbol] = nil
+				if not kinds then
+					print("Cannot find the mark under the cursor")
+					return
 				end
+				local symbols = kinds[s.kind]
+				if not symbols then
+					print("Cannot find the mark under the cursor")
+					return
+				end
+				local symbol = symbols[s.symbol]
+				if not symbol then
+					print("Cannot find the mark under the cursor")
+					return
+				end
+
+				symbol.marks[tostring(s.offset)] = nil
+				if vim.tbl_isempty(symbol.marks) then
+					symbols[s.symbol] = nil
+				end
+
 				bookmarks.save_bookmarks()
 				local current_picker = action_state.get_current_picker(prompt_bufnr)
 				current_picker:delete_selection(function() end)
