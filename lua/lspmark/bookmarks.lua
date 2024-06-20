@@ -75,7 +75,7 @@ function M.display_bookmarks(bufnr)
 					icon_group,
 					sign_name,
 					bufnr,
-					{ lnum = start_line + tonumber(offset) + 1, priority = 10 }
+					{ lnum = start_line + tonumber(offset) + 1, priority = 100 }
 				)
 				mark.id = id
 			end
