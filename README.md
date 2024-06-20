@@ -37,7 +37,7 @@ Then not only the bookmarks, but also you, are in the right place. Let me show y
 
 ## Setup & Usage
 
-All you need to do is install it using your favorite plugin manager and run the following code after installation:
+All you need to do is installing it using your favorite plugin manager and run the following code after installation:
 
 ```lua
 require("lspmark").setup()
@@ -46,10 +46,10 @@ require("telescope").load_extension("lspmark")
 
 and bind the following functions to your preferred keys:
 
-- You key to paste text (`p`): `require('lspmark.bookmarks').paste_text()`;
-- You key to toggle the mark: `require('lspmark.bookmarks').toggle_bookmark()`;
-- You key to delete text in visual mode (`d`): `require('lspmark.bookmarks').delete_visual_selection()`;
-- You key to delete one line (`dd`): `lua require('lspmark.bookmarks').delete_line()`.
+- Your key to paste text (`p`): `require('lspmark.bookmarks').paste_text()`;
+- Your key to toggle the mark: `require('lspmark.bookmarks').toggle_bookmark()`;
+- Your key to delete text in visual mode (`d`): `require('lspmark.bookmarks').delete_visual_selection()`;
+- Your key to delete one line (`dd`): `lua require('lspmark.bookmarks').delete_line()`.
 
 To open the telescope window, you can run `Telescope lspmark`, to delete current selection in the telescope picker, you can press `d`.
 
