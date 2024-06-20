@@ -60,10 +60,10 @@ function M.display_bookmarks(bufnr)
 	end
 
 	local sign_name = "lspmark_symbol"
-	local icon = "🚩"
+	local icon = "->"
 
 	if vim.fn.sign_getdefined(sign_name) == nil or #vim.fn.sign_getdefined(sign_name) == 0 then
-		vim.fn.sign_define(sign_name, { text = icon, texthl = "Error", numhl = "Error" })
+		vim.fn.sign_define(sign_name, { text = icon, texthl = "LspMark", numhl = "LspMark" })
 	end
 
 	for _, symbols in pairs(M.bookmarks[file_name]) do
