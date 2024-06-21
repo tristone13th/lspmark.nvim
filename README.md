@@ -15,25 +15,35 @@ Then not only the bookmarks, but also you, are in the right place. Let me show y
 
 ## Features
 
-### Persistent bookmarks
+<details>
+  <summary>Persistent bookmarks</summary>
+  
+  ![persistent](https://github.com/tristone13th/lspmark.nvim/assets/17382962/b23b3c5a-b489-45c5-b5a3-afbc57590c47)
+</details>
 
-![persistent](https://github.com/tristone13th/lspmark.nvim/assets/17382962/b23b3c5a-b489-45c5-b5a3-afbc57590c47)
+<details>
+  <summary>Persist bookmarks after format</summary>
+  
+  ![format](https://github.com/tristone13th/lspmark.nvim/assets/17382962/cdf24f0f-e2c5-49b3-82c2-94295c51d64c)
+</details>
 
-### Persist bookmarks after format
+<details>
+  <summary>Delete and paste bookmarks in 1 buffer</summary>
+  
+  ![buffer](https://github.com/tristone13th/lspmark.nvim/assets/17382962/6639c3c6-7900-40b8-b681-c3f48255a016)
+</details>
 
-![format](https://github.com/tristone13th/lspmark.nvim/assets/17382962/cdf24f0f-e2c5-49b3-82c2-94295c51d64c)
+<details>
+  <summary>Delete and paste across buffers</summary>
+  
+  ![buffers](https://github.com/tristone13th/lspmark.nvim/assets/17382962/6447be15-860e-405e-ad4d-f1cd997dd94a)
+</details>
 
-### Delete and paste bookmarks in 1 buffer
-
-![buffer](https://github.com/tristone13th/lspmark.nvim/assets/17382962/6639c3c6-7900-40b8-b681-c3f48255a016)
-
-### Delete and paste across buffers
-
-![buffers](https://github.com/tristone13th/lspmark.nvim/assets/17382962/6447be15-860e-405e-ad4d-f1cd997dd94a)
-
-### Telescope integration
-
-![telescope](https://github.com/tristone13th/lspmark.nvim/assets/17382962/9944a07c-6d29-4a4c-a473-9d088f9902c3)
+<details>
+  <summary>Telescope integration</summary>
+  
+  ![telescope](https://github.com/tristone13th/lspmark.nvim/assets/17382962/9944a07c-6d29-4a4c-a473-9d088f9902c3)
+</details>
 
 ## Setup & Usage
 
