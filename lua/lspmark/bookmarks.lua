@@ -8,6 +8,7 @@ M.yanked = false
 M.marks_in_selection = {}
 M.mode = "c"
 M.process_selection = false
+local ns_id = vim.api.nvim_create_namespace("lspmark")
 
 function M.setup()
 	vim.api.nvim_create_autocmd({ "DirChangedPre" }, {
@@ -44,6 +45,13 @@ function M.setup()
 	})
 end
 
+local function create_right_aligned_highlight(text, offset)
+	local res = vim.fn.getwininfo(vim.api.nvim_get_current_win())[1]
+	local line_width = vim.api.nvim_win_get_width(0) - res.textoff
+	local target_col = line_width - string.len(text) + offset
+	return target_col
+end
+
 function M.display_bookmarks(bufnr)
 	if bufnr == 0 then
 		bufnr = vim.api.nvim_get_current_buf()
@@ -52,6 +60,7 @@ function M.display_bookmarks(bufnr)
 	local icon_group = "lspmark"
 
 	vim.fn.sign_unplace(icon_group, { buffer = bufnr })
+	vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
 	local file_name = vim.api.nvim_buf_get_name(bufnr)
 
@@ -70,6 +79,21 @@ function M.display_bookmarks(bufnr)
 		for _, symbol in pairs(symbols) do
 			local start_line = symbol.range[1] -- Convert to 1-based indexing
 			for offset, mark in pairs(symbol.marks) do
+				local line = start_line + tonumber(offset)
+				local comment = mark.comment
+				-- -1 for placing other signs such as gitsigns
+				if string.len(mark.comment) > 15 then
+					comment = string.sub(mark.comment, 1, 12) .. "..."
+				end
+				local col = create_right_aligned_highlight(comment, -1)
+				local opts = {
+					virt_text = { { comment, "LspMarkComment" } },
+					virt_text_pos = "overlay",
+					hl_mode = "combine",
+					virt_text_win_col = col,
+				}
+
+				vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, 0, opts)
 				local id = vim.fn.sign_place(
 					0,
 					icon_group,
@@ -125,7 +149,17 @@ function M.get_document_symbol(bufnr)
 	return nil
 end
 
-function M.create_bookmark(symbol)
+local function _modify_comment(marks, offset)
+	vim.ui.input({ prompt = "Input new comment: ", default = marks[tostring(offset)].comment }, function(input)
+		if input ~= nil then
+			marks[tostring(offset)].comment = input
+			M.save_bookmarks()
+			M.display_bookmarks(0)
+		end
+	end)
+end
+
+function M.create_bookmark(symbol, with_comment)
 	if not symbol then
 		return
 	end
@@ -158,10 +192,13 @@ function M.create_bookmark(symbol)
 	local l3 = l2[symbol.name]
 	local cursor = vim.api.nvim_win_get_cursor(0)
 	local offset, character = cursor[1] - l3.range[1] - 1, cursor[2]
-	l3.marks[tostring(offset)] = { col = character, text = vim.api.nvim_get_current_line() }
-
-	M.save_bookmarks()
-	M.display_bookmarks(0)
+	l3.marks[tostring(offset)] = { col = character, text = vim.api.nvim_get_current_line(), comment = "" }
+	if with_comment then
+		_modify_comment(l3.marks, offset)
+	else
+		M.save_bookmarks()
+		M.display_bookmarks(0)
+	end
 end
 
 function M.delete_bookmark(symbol)
@@ -235,10 +272,37 @@ function M.has_bookmark(symbol)
 		return false
 	end
 
-	return true
+	return { filepath = file_path, offset = offset }
 end
 
-function M.toggle_bookmark()
+function M.toggle_bookmark(opts)
+	local bufnr = vim.api.nvim_get_current_buf()
+	local with_comment = true
+	if opts then
+		with_comment = opts.with_comment
+	end
+
+	if vim.api.nvim_get_option_value("modified", { buf = bufnr }) then
+		print("Could toggle bookmark, please save the buffer first.")
+		return
+	end
+
+	local symbol = M.get_document_symbol()
+
+	if not symbol then
+		print("Couldn't match a LSP symbol under the cursor.")
+		return
+	end
+
+	local res = M.has_bookmark(symbol)
+	if res then
+		M.delete_bookmark(symbol)
+	else
+		M.create_bookmark(symbol, with_comment)
+	end
+end
+
+function M.modify_comment()
 	local bufnr = vim.api.nvim_get_current_buf()
 
 	if vim.api.nvim_get_option_value("modified", { buf = bufnr }) then
@@ -253,10 +317,34 @@ function M.toggle_bookmark()
 		return
 	end
 
-	if M.has_bookmark(symbol) then
-		M.delete_bookmark(symbol)
+	local res = M.has_bookmark(symbol)
+	if res then
+		_modify_comment(M.bookmarks[res.filepath][tostring(symbol.kind)][symbol.name].marks, res.offset)
 	else
-		M.create_bookmark(symbol)
+		print("Couldn't find a bookmark under the cursor.")
+	end
+end
+
+function M.show_comment()
+	local bufnr = vim.api.nvim_get_current_buf()
+
+	if vim.api.nvim_get_option_value("modified", { buf = bufnr }) then
+		print("Could toggle bookmark, please save the buffer first.")
+		return
+	end
+
+	local symbol = M.get_document_symbol()
+
+	if not symbol then
+		print("Couldn't match a LSP symbol under the cursor.")
+		return
+	end
+
+	local res = M.has_bookmark(symbol)
+	if res then
+		print(M.bookmarks[res.filepath][tostring(symbol.kind)][symbol.name].marks[tostring(res.offset)].comment)
+	else
+		print("Couldn't find a bookmark under the cursor.")
 	end
 end
 
@@ -333,7 +421,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 
 							local new_offset = mark.line - r.start.line - 1
 							local text = vim.api.nvim_buf_get_lines(bufnr, mark.line - 1, mark.line, false)[1]
-							new_marks.marks[tostring(new_offset)] = { col = 0, text = text }
+							new_marks.marks[tostring(new_offset)] = { col = 0, text = text, comment = mark.comment }
 						end
 					end
 				end
@@ -372,7 +460,11 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 							end
 							new_offset = line - r.start.line - 1
 							local text = vim.api.nvim_buf_get_lines(bufnr, line - 1, line, false)[1]
-							new_marks.marks[tostring(new_offset)] = { col = mark.character, text = text }
+							new_marks.marks[tostring(new_offset)] = {
+								col = mark.character,
+								text = text,
+								comment = mark.comment,
+							}
 						end
 					end
 				end

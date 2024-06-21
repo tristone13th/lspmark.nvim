@@ -14,7 +14,7 @@ function M.lspmark(opts)
 	local results = {}
 	local protocol = vim.lsp.protocol
 
-	local max_file_name_len, max_kind_len, max_symbol_len, max_line_len = 0, 0, 0, 0
+	local max_file_name_len, max_kind_len, max_symbol_len, max_line_len, max_comment_len = 0, 0, 0, 0, 0
 	for file_name, kinds in pairs(bookmarks.bookmarks) do
 		max_file_name_len = math.max(string.len(file_name:match("^.+/(.+)$")), max_file_name_len)
 		for kind, symbols in pairs(kinds) do
@@ -26,6 +26,7 @@ function M.lspmark(opts)
 				for offset, mark in pairs(symbol.marks) do
 					local text = mark.text:match("^%s*(.-)%s*$")
 					max_line_len = math.max(string.len(text), max_line_len)
+					max_comment_len = math.max(string.len(mark.comment), max_comment_len)
 					table.insert(results, {
 						filename = file_name,
 						kind = kind,
@@ -36,6 +37,7 @@ function M.lspmark(opts)
 						col = symbol.range[3],
 						symbol = name,
 						text = text,
+						comment = mark.comment,
 					})
 				end
 			end
@@ -47,8 +49,8 @@ function M.lspmark(opts)
 		items = {
 			{ width = max_file_name_len },
 			{ width = max_kind_len },
-			{ width = max_symbol_len },
-			{ width = max_line_len },
+			{ width = 0.2 },
+			{ width = 0.3 },
 			{ remaining = true },
 		},
 	})
@@ -66,9 +68,10 @@ function M.lspmark(opts)
 							{ entry.kind_str, entry.kind_hl_group },
 							{ entry.symbol },
 							{ entry.text },
+							{ entry.comment },
 						})
 					end,
-					ordinal = entry.text .. entry.symbol .. entry.kind_str .. file_name,
+					ordinal = entry.comment .. entry.text .. entry.symbol .. entry.kind_str .. file_name,
 					filename = entry.filename,
 					lnum = entry.lnum,
 					col = entry.col,
@@ -76,6 +79,7 @@ function M.lspmark(opts)
 					symbol = entry.symbol,
 					offset = entry.offset,
 					text = entry.text,
+					comment = entry.comment,
 				}
 			end,
 		}),
