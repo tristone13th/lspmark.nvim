@@ -97,6 +97,12 @@ This function is used for modifying the comment for the bookmark under the curso
 
 This function is used for showing the entire content for the bookmark under the cursor.
 
+## Highlights
+
+`LspMark`: The highlight group for the sign at left side.
+
+`LspMarkComment`: The highlight group for the virtual text of the comment.
+
 ## FAQ
 
 <details>
