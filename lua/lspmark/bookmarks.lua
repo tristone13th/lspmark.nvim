@@ -277,7 +277,7 @@ end
 
 function M.toggle_bookmark(opts)
 	local bufnr = vim.api.nvim_get_current_buf()
-	local with_comment = true
+	local with_comment = false
 	if opts then
 		with_comment = opts.with_comment
 	end
