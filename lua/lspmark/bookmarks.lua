@@ -86,7 +86,7 @@ function M.display_bookmarks(bufnr)
 				local comment = mark.comment
 				-- -1 for placing other signs such as gitsigns
 				if string.len(mark.comment) > 15 then
-					comment = string.sub(mark.comment, 1, 12) .. "..."
+					comment = string.sub(mark.comment, 1, 13) .. ".."
 				end
 				local col = create_right_aligned_highlight(comment, -1)
 				local opts = {
