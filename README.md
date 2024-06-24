@@ -85,15 +85,15 @@ You can change `with_comment` to true to give you a prompt asking for comment ea
 
 This function is used for deleting the selection with bookmarks in **visual mode**, you can bind the key to delete text in visual mode (`d`) to it.
 
-### `lua require('lspmark.bookmarks').delete_line()`
+### `require('lspmark.bookmarks').delete_line()`
 
 This function is used for deleting one line with a bookmark in **normal mode**, you can bind the key to delete line in normal mode (`dd`) to it.
 
-### `lua require('lspmark.bookmarks').modify_comment()`
+### `require('lspmark.bookmarks').modify_comment()`
 
 This function is used for modifying the comment for the bookmark under the cursor.
 
-### `lua require('lspmark.bookmarks').show_comment()`
+### `require('lspmark.bookmarks').show_comment()`
 
 This function is used for showing the entire content for the bookmark under the cursor.
 
