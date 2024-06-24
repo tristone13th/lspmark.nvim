@@ -80,6 +80,9 @@ function M.display_bookmarks(bufnr)
 			local start_line = symbol.range[1] -- Convert to 1-based indexing
 			for offset, mark in pairs(symbol.marks) do
 				local line = start_line + tonumber(offset)
+				local id = vim.fn.sign_place(0, icon_group, sign_name, bufnr, { lnum = line + 1, priority = 100 })
+				mark.id = id
+
 				local comment = mark.comment
 				-- -1 for placing other signs such as gitsigns
 				if string.len(mark.comment) > 15 then
@@ -92,16 +95,7 @@ function M.display_bookmarks(bufnr)
 					hl_mode = "combine",
 					virt_text_win_col = col,
 				}
-
 				vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, 0, opts)
-				local id = vim.fn.sign_place(
-					0,
-					icon_group,
-					sign_name,
-					bufnr,
-					{ lnum = start_line + tonumber(offset) + 1, priority = 100 }
-				)
-				mark.id = id
 			end
 		end
 	end
@@ -113,7 +107,7 @@ function M.get_document_symbol(bufnr)
 	end
 
 	local cursor = vim.api.nvim_win_get_cursor(0)
-	local line, character = cursor[1] - 1, cursor[2]
+	local line, _ = cursor[1] - 1, cursor[2]
 	local params = vim.lsp.util.make_position_params()
 	local result, err = vim.lsp.buf_request_sync(bufnr, "textDocument/documentSymbol", params, 1000)
 
