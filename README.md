@@ -2,6 +2,8 @@
 
 A Sane[^1] Project-wise[^2] Bookmarks Plugin with Persistent[^3] Storage Based on LSP[^4] for Neovim.
 
+> Note: If you find any error log reported please try to remove the folder containing persistent files first (on Linux it is `~/.local/share/nvim/lspmark/`) since during the development the internal representation of bookmarks may changed. :-)
+
 There is a bunch of bookmark plugins but none of them suit my demand, if you also finding a bookmark plugin that can:
 
 1. Organize the bookmarks in project-wise since in most of my time I open Neovim in a project (cwd) and jump here and there,

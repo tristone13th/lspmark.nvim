@@ -17,28 +17,31 @@ function M.lspmark(opts)
 	local max_file_name_len, max_kind_len, max_symbol_len, max_line_len, max_comment_len = 0, 0, 0, 0, 0
 	for file_name, kinds in pairs(bookmarks.bookmarks) do
 		max_file_name_len = math.max(string.len(file_name:match("^.+/(.+)$")), max_file_name_len)
-		for kind, symbols in pairs(kinds) do
+		for kind, name_symbols in pairs(kinds) do
 			local kind_hl_group = highlight.symbol_colors[tonumber(kind)]
 			local kind_str = protocol.SymbolKind[tonumber(kind)] or "Unknown"
 			max_kind_len = math.max(string.len(kind_str), max_kind_len)
-			for name, symbol in pairs(symbols) do
+			for name, symbols in pairs(name_symbols) do
 				max_symbol_len = math.max(string.len(name), max_symbol_len)
-				for offset, mark in pairs(symbol.marks) do
-					local text = mark.text:match("^%s*(.-)%s*$")
-					max_line_len = math.max(string.len(text), max_line_len)
-					max_comment_len = math.max(string.len(mark.comment), max_comment_len)
-					table.insert(results, {
-						filename = file_name,
-						kind = kind,
-						kind_str = kind_str,
-						kind_hl_group = kind_hl_group,
-						lnum = symbol.range[1] + tonumber(offset) + 1,
-						offset = offset,
-						col = symbol.range[3],
-						symbol = name,
-						text = text,
-						comment = mark.comment,
-					})
+				for offset, marks in pairs(symbols) do
+					for _, mark in ipairs(marks) do
+						local text = mark.text:match("^%s*(.-)%s*$")
+						max_line_len = math.max(string.len(text), max_line_len)
+						max_comment_len = math.max(string.len(mark.comment), max_comment_len)
+						table.insert(results, {
+							filename = file_name,
+							kind = kind,
+							kind_str = kind_str,
+							kind_hl_group = kind_hl_group,
+							lnum = mark.range[1] + tonumber(offset) + 1,
+							offset = offset,
+							col = mark.range[3],
+							symbol = name,
+							text = text,
+							comment = mark.comment,
+							id = mark.id,
+						})
+					end
 				end
 			end
 		end
@@ -80,6 +83,7 @@ function M.lspmark(opts)
 					offset = entry.offset,
 					text = entry.text,
 					comment = entry.comment,
+					id = entry.id,
 				}
 			end,
 		}),
@@ -116,10 +120,23 @@ function M.lspmark(opts)
 					print("Cannot find the mark under the cursor")
 					return
 				end
+				local marks = symbol[tostring(s.offset)]
+				if not marks then
+					print("Cannot find the mark under the cursor")
+					return
+				end
 
-				symbol.marks[tostring(s.offset)] = nil
-				if vim.tbl_isempty(symbol.marks) then
-					symbols[s.symbol] = nil
+				local index = 1
+				for idx, mark in ipairs(marks) do
+					if mark.id == s.id then
+						index = idx
+						break
+					end
+				end
+
+				table.remove(symbol[tostring(s.offset)], index)
+				if vim.tbl_isempty(symbol[tostring(s.offset)]) then
+					symbol[tostring(s.offset)] = nil
 				end
 
 				bookmarks.save_bookmarks()
