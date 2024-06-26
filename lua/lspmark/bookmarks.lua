@@ -625,21 +625,23 @@ end
 
 function M.paste_text()
 	if not M.yanked then
-		local cursor = vim.api.nvim_win_get_cursor(0)
-		vim.api.nvim_put(split_text(M.text), M.mode, true, false)
-		for _, mark in ipairs(M.marks_in_selection) do
-			if M.mode == "l" then
-				mark.line = mark.offset_in_selection + cursor[1] + 1
-			else
-				mark.line = mark.offset_in_selection + cursor[1]
+		if M.text ~= nil then
+			local cursor = vim.api.nvim_win_get_cursor(0)
+			vim.api.nvim_put(split_text(M.text), M.mode, true, false)
+			for _, mark in ipairs(M.marks_in_selection) do
+				if M.mode == "l" then
+					mark.line = mark.offset_in_selection + cursor[1] + 1
+				else
+					mark.line = mark.offset_in_selection + cursor[1]
+				end
 			end
+			if not vim.tbl_isempty(M.marks_in_selection) then
+				M.process_selection = true
+			else
+				M.process_selection = false
+			end
+			vim.cmd("silent! w")
 		end
-		if not vim.tbl_isempty(M.marks_in_selection) then
-			M.process_selection = true
-		else
-			M.process_selection = false
-		end
-		vim.cmd("silent! w")
 	else
 		vim.cmd("normal! p")
 	end
