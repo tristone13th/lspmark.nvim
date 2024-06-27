@@ -230,8 +230,45 @@ function M.create_bookmark(symbol, with_comment)
 end
 
 local function match(lsp_symbols, mark)
-	local index = 1
+	if #lsp_symbols == 1 then
+		return 1
+	end
+	local index = 0
 	local min = 2147483647
+
+	-- First match details
+	if mark.details then
+		local values = {}
+		for i, symbol in ipairs(lsp_symbols) do
+			if not symbol.details then
+				symbol.details = ""
+			end
+
+			local score
+			if symbol.details == "" or mark.details == "" then
+				score = 2147483647
+			else
+				score = utils.levenshtein(symbol.details, mark.details)
+			end
+
+			if score < min then
+				index = i
+				min = score
+			end
+			values[tostring(score)] = "lspmark"
+		end
+
+		local num = 0
+		for _, _ in pairs(values) do
+			num = num + 1
+		end
+		if num > 1 then
+			return index
+		end
+	end
+
+	index = 0
+	min = 2147483647
 	for i, symbol in ipairs(lsp_symbols) do
 		if symbol.location then -- SymbolInformation type
 			symbol.range = symbol.location.range
@@ -395,11 +432,12 @@ function M.lsp_calibrate_bookmarks(bufnr)
 	local file_name = vim.api.nvim_buf_get_name(bufnr)
 	if (not vim.tbl_isempty(M.bookmarks) and M.bookmarks[file_name] ~= nil) or M.process_selection then
 		local params = vim.lsp.util.make_position_params()
-		vim.lsp.buf_request(bufnr, "textDocument/documentSymbol", params, function(err, result)
-			if err then
-				vim.api.nvim_err_writeln("Error getting semantic tokens: " .. err.message)
+		vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(result)
+			if not result or vim.tbl_isempty(result) or not result[1] then
+				print("Empty LSP result.")
 				return
 			end
+			result = result[1].result
 			if not result or vim.tbl_isempty(result) then
 				print("Empty LSP result.")
 				return
