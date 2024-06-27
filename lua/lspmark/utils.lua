@@ -52,11 +52,14 @@ function M.get_sign_from_id(bufnr, id)
 	return signs[1].signs[1]
 end
 
-function M.get_text(start_line, end_line, start_c, end_c)
+function M.get_text(start_line, end_line, start_c, end_c, bufnr)
 	local n_lines = math.abs(end_line - start_line) + 1
 
 	-- get all lines of text
-	local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
+	if not bufnr then
+		bufnr = 0
+	end
+	local lines = vim.api.nvim_buf_get_lines(bufnr, start_line - 1, end_line, false)
 	lines[1] = string.sub(lines[1], start_c, -1)
 	if n_lines == 1 then
 		lines[n_lines] = string.sub(lines[n_lines], 1, end_c - start_c + 1)

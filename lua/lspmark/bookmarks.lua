@@ -484,7 +484,8 @@ function M.lsp_calibrate_bookmarks(bufnr)
 											r.start.line + 1,
 											r["end"].line + 1,
 											r.start.character,
-											r["end"].character
+											r["end"].character,
+											bufnr
 										),
 										""
 									)
@@ -528,7 +529,8 @@ function M.lsp_calibrate_bookmarks(bufnr)
 										r.start.line + 1,
 										r["end"].line + 1,
 										r.start.character,
-										r["end"].character
+										r["end"].character,
+										bufnr
 									),
 									""
 								)
@@ -641,7 +643,7 @@ local function get_visual_selection()
 		end
 	end
 
-	local lines = utils.get_text(start_line, end_line, start_c, end_c)
+	local lines = utils.get_text(start_line, end_line, start_c, end_c, bufnr)
 
 	if end_c == 2147483647 then
 		M.mode = "l"
