@@ -98,14 +98,6 @@ function M.levenshtein(str1, str2)
 	return matrix[#str1][#str2]
 end
 
-function M._modify_comment(marks, index)
-	vim.ui.input({ prompt = "Input new comment: ", default = marks[index].comment }, function(input)
-		if input ~= nil then
-			marks[index].comment = input
-		end
-	end)
-end
-
 function M.string_truncate(s, len)
 	-- -1 for placing other signs such as gitsigns
 	if string.len(s) > len then
@@ -147,6 +139,15 @@ function M.get_document_symbol(bufnr, line)
 		end
 	end
 	return nil
+end
+
+function M.split_text(text)
+	local sep = "\n"
+	local t = {}
+	for str in string.gmatch(text, "([^" .. sep .. "]+)") do
+		table.insert(t, str)
+	end
+	return t
 end
 
 return M
