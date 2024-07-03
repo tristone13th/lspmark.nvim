@@ -124,7 +124,7 @@ end
 --      sign/symbol information which is up-to-date.
 --   2. Rough calibration: calibrate each mark's other stuffs only using LSP symbol
 --      information when it doesn't have a corresponding sign.
-local function lsp_calibrate_bookmarks(bufnr, async)
+function M.lsp_calibrate_bookmarks(bufnr, async)
 	if bufnr == nil then
 		bufnr = vim.api.nvim_get_current_buf()
 	end
@@ -132,23 +132,23 @@ local function lsp_calibrate_bookmarks(bufnr, async)
 		async = true
 	end
 	local file_name = vim.api.nvim_buf_get_name(bufnr)
-	if not vim.tbl_isempty(M.bookmarks) and M.bookmarks[file_name] ~= nil then
-		local function helper(result)
-			if not result or vim.tbl_isempty(result) then
-				print("Empty LSP result.")
-				return
-			end
-			-- Calibrate each mark's information (mainly offset) using sign information.
-			--
-			-- If a sign has a corresponding mark, then calibrate the mark with the sign's info
-			-- since the sign is always up-to-date (Such as when the buffer is modified).
-			--
-			-- If a sign doesn't have a corresponding mark, then create the mark. This relates to
-			-- the case we pasted the text with marks included.
-			local extmarks = vim.fn.sign_getplaced(bufnr, { group = "lspmark" })
-			for _, marks in ipairs(extmarks) do
-				for _, sign in ipairs(marks.signs) do
-					local matched = false
+	local function helper(result)
+		if not result or vim.tbl_isempty(result) then
+			print("Empty LSP result.")
+			return
+		end
+		-- Calibrate each mark's information (mainly offset) using sign information.
+		--
+		-- If a sign has a corresponding mark, then calibrate the mark with the sign's info
+		-- since the sign is always up-to-date (Such as when the buffer is modified).
+		--
+		-- If a sign doesn't have a corresponding mark, then create the mark. This relates to
+		-- the case we pasted the text with marks included.
+		local extmarks = vim.fn.sign_getplaced(bufnr, { group = "lspmark" })
+		for _, marks in ipairs(extmarks) do
+			for _, sign in ipairs(marks.signs) do
+				local matched = false
+				if M.bookmarks[file_name] ~= nil then
 					for _, kind_symbols in pairs(M.bookmarks[file_name]) do
 						for _, name_symbols in pairs(kind_symbols) do
 							for _, bookmarks in pairs(name_symbols) do
@@ -214,28 +214,31 @@ local function lsp_calibrate_bookmarks(bufnr, async)
 							end
 						end
 					end
-					-- This sign is created when pasting, create a new bookmark for it
-					if not matched then
-						for _, s in ipairs(result) do
-							if s.location then -- SymbolInformation type
-								s.range = s.location.range
-							end
-							local r = s.range
-							if utils.is_position_in_range(sign.lnum - 1, r.start.line, r["end"].line) then
-								create_bookmark(s, sign.lnum, 0, sign.id, sign_info[tostring(sign.id)] or "")
-							end
+				end
+				utils.clear_empty_tables(M.bookmarks)
+				-- This sign is created when pasting/creating, create a new bookmark for it
+				if not matched then
+					for _, s in ipairs(result) do
+						if s.location then -- SymbolInformation type
+							s.range = s.location.range
+						end
+						local r = s.range
+						if utils.is_position_in_range(sign.lnum - 1, r.start.line, r["end"].line) then
+							create_bookmark(s, sign.lnum, 0, sign.id, sign_info[tostring(sign.id)] or "")
 						end
 					end
 				end
 			end
-			sign_info = {}
-			-- Fallback to calibrate each mark using LSP information.
-			--
-			-- Not all bookmarks will get calibrated in the first phase using signs,
-			-- if we format a buffer then all the signs will get lost. thus we need to
-			-- calibrate the bookmarks with the LSP information, we don't need to update
-			-- the offset for each mark, we need to update the information related to the mark
-			-- such as line text and symbol text.
+		end
+		sign_info = {}
+		-- Fallback to calibrate each mark using LSP information.
+		--
+		-- Not all bookmarks will get calibrated in the first phase using signs,
+		-- if we format a buffer then all the signs will get lost. thus we need to
+		-- calibrate the bookmarks with the LSP information, we don't need to update
+		-- the offset for each mark, we need to update the information related to the mark
+		-- such as line text and symbol text.
+		if M.bookmarks[file_name] ~= nil then
 			for kind, kind_symbols in pairs(M.bookmarks[file_name]) do
 				for name, name_symbols in pairs(kind_symbols) do
 					-- Get all LSP symbols with the same kind and name
@@ -253,32 +256,38 @@ local function lsp_calibrate_bookmarks(bufnr, async)
 					else
 						-- Find the most suitable LSP symbol for each mark
 						for offset, bookmarks in pairs(name_symbols) do
-							for _, mark in ipairs(bookmarks) do
+							for i = #bookmarks, 1, -1 do
+								local mark = bookmarks[i]
 								if not mark.calibrated then
 									local idx = match(same_name_symbols, mark)
 									local symbol = same_name_symbols[idx]
 									local r = symbol.range
-									mark.range = {
-										r.start.line,
-										r["end"].line,
-										r.start.character,
-										r["end"].character,
-									}
-									mark.details = symbol.details
-									local line = tonumber(offset) + r.start.line + 1
-									mark.text = vim.api.nvim_buf_get_lines(bufnr, line - 1, line, false)[1]
-									mark.symbol_text = utils.remove_blanks(
-										table.concat(
-											utils.get_text(
-												r.start.line + 1,
-												r["end"].line + 1,
-												r.start.character,
-												r["end"].character,
-												bufnr
-											),
-											""
+
+									if tonumber(offset) > (r["end"].line - r.start.line) then
+										table.remove(bookmarks, i)
+									else
+										mark.range = {
+											r.start.line,
+											r["end"].line,
+											r.start.character,
+											r["end"].character,
+										}
+										mark.details = symbol.details
+										local line = tonumber(offset) + r.start.line + 1
+										mark.text = vim.api.nvim_buf_get_lines(bufnr, line - 1, line, false)[1]
+										mark.symbol_text = utils.remove_blanks(
+											table.concat(
+												utils.get_text(
+													r.start.line + 1,
+													r["end"].line + 1,
+													r.start.character,
+													r["end"].character,
+													bufnr
+												),
+												""
+											)
 										)
-									)
+									end
 								end
 								mark.calibrated = false
 							end
@@ -286,42 +295,41 @@ local function lsp_calibrate_bookmarks(bufnr, async)
 					end
 				end
 			end
-			M.save_bookmarks()
-			M.display_bookmarks(bufnr)
 		end
-		local params = vim.lsp.util.make_position_params()
+		utils.clear_empty_tables(M.bookmarks)
+		M.save_bookmarks()
+		M.display_bookmarks(bufnr)
+	end
+	local params = vim.lsp.util.make_position_params()
 
-		if async then
-			vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(result)
-				if not result or vim.tbl_isempty(result) or not result[1] then
-					print("Empty LSP result.")
-					return
-				end
-				result = result[1].result
-				helper(result)
-			end)
-		else
-			local result, err = vim.lsp.buf_request_sync(bufnr, "textDocument/documentSymbol", params, 1000)
-			if err then
-				print("Some errors when getting semantic tokens: ", err)
-				return
-			end
-			if not result or vim.tbl_isempty(result) then
+	if async then
+		vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(result)
+			if not result or vim.tbl_isempty(result) or not result[1] then
 				print("Empty LSP result.")
 				return
 			end
+			result = result[1].result
+			helper(result)
+		end)
+	else
+		local result, err = vim.lsp.buf_request_sync(bufnr, "textDocument/documentSymbol", params, 1000)
+		if err then
+			print("Some errors when getting semantic tokens: ", err)
+			return
+		end
+		if not result or vim.tbl_isempty(result) then
+			print("Empty LSP result.")
+			return
+		end
 
-			-- calibrate
-			for client_id, response in pairs(result) do
-				if response.result then
-					helper(response.result)
-				elseif response.error then
-					print("Error from client ID: ", client_id, response.error)
-				end
+		-- calibrate
+		for client_id, response in pairs(result) do
+			if response.result then
+				helper(response.result)
+			elseif response.error then
+				print("Error from client ID: ", client_id, response.error)
 			end
 		end
-	else
-		M.display_bookmarks(bufnr)
 	end
 end
 
@@ -343,6 +351,7 @@ end
 local function delete_id(id)
 	local res = get_mark_from_id(id)
 	table.remove(res.marks, res.index)
+	utils.clear_empty_tables(M.bookmarks)
 end
 
 local function create_right_aligned_highlight(text, offset)
@@ -356,6 +365,9 @@ function M.display_bookmarks(bufnr)
 	if bufnr == 0 then
 		bufnr = vim.api.nvim_get_current_buf()
 	end
+	if vim.fn.sign_getdefined(sign_name) == nil or #vim.fn.sign_getdefined(sign_name) == 0 then
+		vim.fn.sign_define(sign_name, { text = icon, texthl = "LspMark", numhl = "LspMark" })
+	end
 
 	vim.fn.sign_unplace(icon_group, { buffer = bufnr })
 	vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
@@ -364,10 +376,6 @@ function M.display_bookmarks(bufnr)
 
 	if not M.bookmarks[file_name] then
 		return
-	end
-
-	if vim.fn.sign_getdefined(sign_name) == nil or #vim.fn.sign_getdefined(sign_name) == 0 then
-		vim.fn.sign_define(sign_name, { text = icon, texthl = "LspMark", numhl = "LspMark" })
 	end
 
 	for _, kind_symbols in pairs(M.bookmarks[file_name]) do
@@ -404,7 +412,7 @@ local function delete_bookmark()
 		end
 	end
 
-	lsp_calibrate_bookmarks()
+	M.lsp_calibrate_bookmarks()
 end
 
 -- Do we have a bookmark in current cursor? We judge
@@ -457,22 +465,25 @@ function M.toggle_bookmark(opts)
 		with_comment = opts.with_comment
 	end
 
-	lsp_calibrate_bookmarks(nil, false)
+	M.lsp_calibrate_bookmarks(nil, false)
 	local line = vim.api.nvim_win_get_cursor(0)[1]
 	local id = has_bookmark()
 	if id ~= false then
 		delete_bookmark()
 	else
+		if vim.fn.sign_getdefined(sign_name) == nil or #vim.fn.sign_getdefined(sign_name) == 0 then
+			vim.fn.sign_define(sign_name, { text = icon, texthl = "LspMark", numhl = "LspMark" })
+		end
 		id = vim.fn.sign_place(0, icon_group, sign_name, bufnr, { lnum = line, priority = 100 })
 		if with_comment then
 			modify_comment(id)
 		end
-		lsp_calibrate_bookmarks()
+		M.lsp_calibrate_bookmarks()
 	end
 end
 
 function M.modify_comment()
-	lsp_calibrate_bookmarks(nil, false)
+	M.lsp_calibrate_bookmarks(nil, false)
 	local id = has_bookmark()
 	if id ~= false then
 		modify_comment(id)
@@ -480,7 +491,7 @@ function M.modify_comment()
 		print("Couldn't find a bookmark under the cursor.")
 	end
 
-	lsp_calibrate_bookmarks()
+	M.lsp_calibrate_bookmarks()
 end
 
 function M.show_comment()
@@ -501,7 +512,7 @@ function M.show_comment()
 end
 
 local function on_lsp_attach(event)
-	lsp_calibrate_bookmarks(event.buf)
+	M.lsp_calibrate_bookmarks(event.buf)
 end
 
 local function on_buf_enter(event)
@@ -509,7 +520,7 @@ local function on_buf_enter(event)
 end
 
 local function on_buf_write_post(event)
-	lsp_calibrate_bookmarks(event.buf)
+	M.lsp_calibrate_bookmarks(event.buf)
 end
 
 function M.load_bookmarks()
@@ -561,6 +572,9 @@ function M.paste_text()
 			local cursor = vim.api.nvim_win_get_cursor(0)
 			local bufnr = vim.api.nvim_get_current_buf()
 			vim.api.nvim_put(utils.split_text(M.text), M.mode, true, false)
+			if vim.fn.sign_getdefined(sign_name) == nil or #vim.fn.sign_getdefined(sign_name) == 0 then
+				vim.fn.sign_define(sign_name, { text = icon, texthl = "LspMark", numhl = "LspMark" })
+			end
 			for _, mark in ipairs(M.marks_in_selection) do
 				local line
 				if M.mode == "l" then
@@ -569,15 +583,11 @@ function M.paste_text()
 					line = mark.offset_in_selection + cursor[1]
 				end
 
-				if vim.fn.sign_getdefined(sign_name) == nil or #vim.fn.sign_getdefined(sign_name) == 0 then
-					vim.fn.sign_define(sign_name, { text = icon, texthl = "LspMark", numhl = "LspMark" })
-				end
-
 				local id = vim.fn.sign_place(0, icon_group, sign_name, bufnr, { lnum = line, priority = 100 })
 				sign_info[tostring(id)] = mark.comment
 			end
 
-			lsp_calibrate_bookmarks(bufnr)
+			M.lsp_calibrate_bookmarks(bufnr)
 		end
 	else
 		vim.cmd("normal! p")

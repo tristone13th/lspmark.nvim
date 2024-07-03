@@ -150,4 +150,15 @@ function M.split_text(text)
 	return t
 end
 
+function M.clear_empty_tables(t)
+	for k, v in pairs(t) do
+		if type(v) == "table" then
+			M.clear_empty_tables(v)
+			if next(v) == nil then
+				t[k] = nil
+			end
+		end
+	end
+end
+
 return M

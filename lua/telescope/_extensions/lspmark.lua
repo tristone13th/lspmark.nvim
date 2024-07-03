@@ -8,11 +8,13 @@ local sorters = require("telescope.sorters")
 local bookmarks = require("lspmark.bookmarks")
 local highlight = require("telescope._extensions.highlight")
 local entry_display = require("telescope.pickers.entry_display")
+local utils = require("lspmark.utils")
 
 function M.lspmark(opts)
 	opts = opts or {}
 	local results = {}
 	local protocol = vim.lsp.protocol
+	bookmarks.lsp_calibrate_bookmarks(0, false)
 
 	local max_file_name_len, max_kind_len, max_symbol_len, max_line_len, max_comment_len = 0, 0, 0, 0, 0
 	for file_name, kinds in pairs(bookmarks.bookmarks) do
@@ -135,10 +137,7 @@ function M.lspmark(opts)
 				end
 
 				table.remove(symbol[tostring(s.offset)], index)
-				if vim.tbl_isempty(symbol[tostring(s.offset)]) then
-					symbol[tostring(s.offset)] = nil
-				end
-
+				utils.clear_empty_tables(symbol)
 				bookmarks.save_bookmarks()
 				local current_picker = action_state.get_current_picker(prompt_bufnr)
 				current_picker:delete_selection(function() end)
