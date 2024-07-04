@@ -138,6 +138,14 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 		async = true
 	end
 	local file_name = vim.api.nvim_buf_get_name(bufnr)
+
+	-- Don't send the request to LSP server if both are empty
+	utils.clear_empty_tables(M.bookmarks)
+	local extmarks = vim.fn.sign_getplaced(bufnr, { group = "lspmark" })
+	if vim.tbl_isempty(extmarks) and M.bookmarks[file_name] == nil then
+		return
+	end
+
 	local function helper(result)
 		if not result or vim.tbl_isempty(result) then
 			print("Empty LSP result.")
