@@ -19,33 +19,39 @@ local virt_text_opts = {
 	undo_restore = true,
 }
 
-local function create_bookmark(symbol, line, col, id, with_comment)
-	if not symbol then
-		return
-	end
-	local file_name = vim.api.nvim_buf_get_name(0)
+local function ensure_path_valid(file_name, kind, name, offset)
 	if not M.bookmarks[file_name] then
 		M.bookmarks[file_name] = {}
 	end
 	local l1 = M.bookmarks[file_name]
-	if not l1[tostring(symbol.kind)] then
-		l1[tostring(symbol.kind)] = {}
+	if not l1[tostring(kind)] then
+		l1[tostring(kind)] = {}
 	end
-	local l2 = l1[tostring(symbol.kind)]
-	if not l2[symbol.name] then
-		l2[symbol.name] = {}
+	local l2 = l1[tostring(kind)]
+	if not l2[name] then
+		l2[name] = {}
 	end
+	local l3 = l2[name]
+	if not l3[tostring(offset)] then
+		l3[tostring(offset)] = {}
+	end
+	return l3
+end
+
+local function create_bookmark(symbol, line, col, with_comment)
+	if not symbol then
+		return
+	end
+	local file_name = vim.api.nvim_buf_get_name(0)
+
 	if symbol.location then -- SymbolInformation type
 		symbol.range = symbol.location.range
 	end
 	local r = symbol.range
-	local l3 = l2[symbol.name]
+
 	local offset, character = line - r.start.line - 1, col
-	if not l3[tostring(offset)] then
-		l3[tostring(offset)] = {}
-	end
+	local l3 = ensure_path_valid(file_name, symbol.kind, symbol.name, offset)
 	table.insert(l3[tostring(offset)], {
-		id = id,
 		range = {
 			r.start.line,
 			r["end"].line,
@@ -152,7 +158,10 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 					for _, kind_symbols in pairs(M.bookmarks[file_name]) do
 						for _, name_symbols in pairs(kind_symbols) do
 							for _, bookmarks in pairs(name_symbols) do
-								for index, mark in ipairs(bookmarks) do
+								-- We should iterate reversely since removing entry
+								-- from the array will result in unexpected behavior
+								for i = #bookmarks, 1, -1 do
+									local mark = bookmarks[i]
 									if mark.id == sign.id then
 										for _, s in ipairs(result) do
 											if s.location then -- SymbolInformation type
@@ -164,19 +173,11 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 											then
 												matched = true
 												local new_offset = sign.lnum - r.start.line - 1
-												table.remove(bookmarks, index)
-												local l1 = M.bookmarks[file_name]
-												if not l1[tostring(s.kind)] then
-													l1[tostring(s.kind)] = {}
-												end
-												local l2 = l1[tostring(s.kind)]
-												if not l2[s.name] then
-													l2[s.name] = {}
-												end
-												local l3 = l2[s.name]
-												if not l3[tostring(new_offset)] then
-													l3[tostring(new_offset)] = {}
-												end
+												table.remove(bookmarks, i)
+												local l3 = ensure_path_valid(file_name, s.kind, s.name, new_offset)
+												-- Don't set the mark.id to sign.id, leave it since otherwise that may
+												-- cause this mark be processed mutliple times. The mark.id will be set
+												-- when displaying.
 												table.insert(l3[tostring(new_offset)], {
 													range = {
 														r.start.line,
@@ -215,8 +216,11 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 						end
 					end
 				end
+				-- Always keep the bookmarks in clean state
 				utils.clear_empty_tables(M.bookmarks)
 				-- This sign is created when pasting/creating, create a new bookmark for it
+				-- Althrough after this sign is processed we won't hit the mark.id == sign.id case,
+				-- we still shouldn't assign the mark.id with sign.id since we better to keep it consistent
 				if not matched then
 					for _, s in ipairs(result) do
 						if s.location then -- SymbolInformation type
@@ -224,7 +228,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 						end
 						local r = s.range
 						if utils.is_position_in_range(sign.lnum - 1, r.start.line, r["end"].line) then
-							create_bookmark(s, sign.lnum, 0, sign.id, sign_info[tostring(sign.id)] or "")
+							create_bookmark(s, sign.lnum, 0, sign_info[tostring(sign.id)] or "")
 						end
 					end
 				end
@@ -234,7 +238,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 		-- Fallback to calibrate each mark using LSP information.
 		--
 		-- Not all bookmarks will get calibrated in the first phase using signs,
-		-- if we format a buffer then all the signs will get lost. thus we need to
+		-- if we **format** a buffer then all the signs will get lost. thus we need to
 		-- calibrate the bookmarks with the LSP information, we don't need to update
 		-- the offset for each mark, we need to update the information related to the mark
 		-- such as line text and symbol text.
@@ -266,6 +270,8 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 									if tonumber(offset) > (r["end"].line - r.start.line) then
 										table.remove(bookmarks, i)
 									else
+										-- This mark doesn't have a related sign, so set it to nil explicitly
+										mark.id = nil
 										mark.range = {
 											r.start.line,
 											r["end"].line,
@@ -511,6 +517,11 @@ function M.show_comment()
 	end
 end
 
+local function on_dir_changed_pre()
+	utils.clear_empty_tables(M.bookmarks)
+	M.save_bookmarks()
+end
+
 local function on_lsp_attach(event)
 	M.lsp_calibrate_bookmarks(event.buf)
 end
@@ -615,7 +626,7 @@ end
 
 function M.setup()
 	vim.api.nvim_create_autocmd({ "DirChangedPre" }, {
-		callback = M.save_bookmarks,
+		callback = on_dir_changed_pre,
 		pattern = { "*" },
 	})
 	-- Include the case when session is loaded since that will also change the cwd.

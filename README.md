@@ -119,6 +119,14 @@ This plugin does not just aim for code navigating, it is also for code refactori
 The symbols in LSP could be considered as the basic logical element for coding. For example, when we format, a line of text could be added, deleted, or even moved to another place, but the LSP symbols in the document won't change a lot. With the help of the information on each LSP symbol, we only need to save each bookmark's offset in that symbol so most of the bookmarks will be kept in their original place, given the fact that most of the developers prefer incremental format rather than format a file entirely. So only the bookmarks in the formatted symbols will be affected and may be placed in another place. This plugin aims to try to keep each bookmark in the place it should be. If you have any ideas to mitigate this, don't hesitate to submit an issue or PR!
 </details>
 
+## Known Issues
+
+<details>
+  <summary>Incorrect telescope preview when the buffer is modified but not saved</summary>
+  <br>
+  This is a known issue of Telescope, see this https://github.com/nvim-telescope/telescope.nvim/issues/2481 and https://github.com/nvim-telescope/telescope.nvim/pull/2946.
+</details>
+
 [^1]: "Sane" means it will try best to respect your intuition.
 [^2]: "Project-wise" means the bookmarks are organized according to the cwd (project).
 [^3]: "Persistent" means the bookmarks will be saved to file so they won't be lost when nvim is opened next time.
