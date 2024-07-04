@@ -131,7 +131,7 @@ end
 --   2. Rough calibration: calibrate each mark's other stuffs only using LSP symbol
 --      information when it doesn't have a corresponding sign.
 function M.lsp_calibrate_bookmarks(bufnr, async)
-	if bufnr == nil then
+	if bufnr == nil or bufnr == 0 then
 		bufnr = vim.api.nvim_get_current_buf()
 	end
 	if async == nil then

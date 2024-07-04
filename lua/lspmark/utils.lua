@@ -107,40 +107,6 @@ function M.string_truncate(s, len)
 	end
 end
 
-function M.get_document_symbol(bufnr, line)
-	if bufnr == nil then
-		bufnr = vim.api.nvim_get_current_buf()
-	end
-	local params = vim.lsp.util.make_position_params()
-	local result, err = vim.lsp.buf_request_sync(bufnr, "textDocument/documentSymbol", params, 1000)
-	if err then
-		print("Error getting semantic tokens: ", err)
-		return
-	end
-	if not result or vim.tbl_isempty(result) then
-		print("No symbols found")
-		return
-	end
-	for client_id, response in pairs(result) do
-		if response.result then
-			for _, symbol in ipairs(response.result) do
-				-- selection range is the same, all need to be modified is following:
-				-- local sr = symbol.selectionRange
-				if symbol.location then -- SymbolInformation type
-					symbol.range = symbol.location.range
-				end
-				local r = symbol.range
-				if M.is_position_in_range(line - 1, r.start.line, r["end"].line) then
-					return symbol
-				end
-			end
-		elseif response.error then
-			print("Error from client ID: ", client_id, response.error)
-		end
-	end
-	return nil
-end
-
 function M.split_text(text)
 	local sep = "\n"
 	local t = {}
