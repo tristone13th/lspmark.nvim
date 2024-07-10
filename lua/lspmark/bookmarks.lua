@@ -7,6 +7,7 @@ M.text = nil
 M.yanked = false
 M.marks_in_selection = {}
 M.mode = "c"
+M.plain_magic = "Plain"
 local sign_info = {}
 local icon_group = "lspmark"
 local sign_name = "lspmark_symbol"
@@ -19,6 +20,12 @@ local virt_text_opts = {
 	undo_restore = true,
 }
 
+local function ensure_sign_defined()
+	if vim.fn.sign_getdefined(sign_name) == nil or #vim.fn.sign_getdefined(sign_name) == 0 then
+		vim.fn.sign_define(sign_name, { text = icon, texthl = "LspMark", numhl = "LspMark" })
+	end
+end
+
 local function ensure_path_valid(file_name, kind, name, offset)
 	if not M.bookmarks[file_name] then
 		M.bookmarks[file_name] = {}
@@ -26,6 +33,9 @@ local function ensure_path_valid(file_name, kind, name, offset)
 	local l1 = M.bookmarks[file_name]
 	if not l1[tostring(kind)] then
 		l1[tostring(kind)] = {}
+	end
+	if name == nil then
+		return l1
 	end
 	local l2 = l1[tostring(kind)]
 	if not l2[name] then
@@ -39,10 +49,17 @@ local function ensure_path_valid(file_name, kind, name, offset)
 end
 
 local function create_bookmark(symbol, line, col, with_comment)
-	if not symbol then
+	local file_name = vim.api.nvim_buf_get_name(0)
+	if symbol == nil then
+		local l1 = ensure_path_valid(file_name, M.plain_magic)
+		table.insert(l1[M.plain_magic], {
+			line = line,
+			col = col,
+			text = vim.api.nvim_buf_get_lines(0, line - 1, line, false)[1],
+			comment = with_comment,
+		})
 		return
 	end
-	local file_name = vim.api.nvim_buf_get_name(0)
 
 	if symbol.location then -- SymbolInformation type
 		symbol.range = symbol.location.range
@@ -60,15 +77,13 @@ local function create_bookmark(symbol, line, col, with_comment)
 		},
 		col = character,
 		text = vim.api.nvim_buf_get_lines(0, line - 1, line, false)[1],
-		comment = "",
+		comment = with_comment,
 		details = symbol.details,
 		symbol_text = utils.remove_blanks(
 			table.concat(utils.get_text(r.start.line + 1, r["end"].line + 1, r.start.character, r["end"].character), "")
 		),
+		calibrated = true,
 	})
-	if with_comment then
-		l3[tostring(offset)][#l3[tostring(offset)]].comment = with_comment
-	end
 end
 
 local function match(lsp_symbols, mark)
@@ -141,81 +156,92 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 
 	-- Don't send the request to LSP server if both are empty
 	utils.clear_empty_tables(M.bookmarks)
-	local extmarks = vim.fn.sign_getplaced(bufnr, { group = "lspmark" })
-	if vim.tbl_isempty(extmarks) and M.bookmarks[file_name] == nil then
+	if vim.tbl_isempty(vim.fn.sign_getplaced(bufnr, { group = "lspmark" })) and M.bookmarks[file_name] == nil then
 		return
 	end
 
 	local function helper(result)
-		if not result or vim.tbl_isempty(result) then
-			print("Empty LSP result.")
-			return
-		end
 		-- Calibrate each mark's information (mainly offset) using sign information.
 		--
-		-- If a sign has a corresponding mark, then calibrate the mark with the sign's info
+		-- If a sign has a corresponding mark, then calibrate the lsp/plain mark with the sign's info
 		-- since the sign is always up-to-date (Such as when the buffer is modified).
 		--
-		-- If a sign doesn't have a corresponding mark, then create the mark. This relates to
-		-- the case we pasted the text with marks included.
+		-- If a sign doesn't have a corresponding mark, then create the lsp/plain mark.
+		-- This relates to the case we pasted the text with marks included.
 		local extmarks = vim.fn.sign_getplaced(bufnr, { group = "lspmark" })
 		for _, marks in ipairs(extmarks) do
 			for _, sign in ipairs(marks.signs) do
 				local matched = false
 				if M.bookmarks[file_name] ~= nil then
-					for _, kind_symbols in pairs(M.bookmarks[file_name]) do
-						for _, name_symbols in pairs(kind_symbols) do
-							for _, bookmarks in pairs(name_symbols) do
-								-- We should iterate reversely since removing entry
-								-- from the array will result in unexpected behavior
-								for i = #bookmarks, 1, -1 do
-									local mark = bookmarks[i]
-									if mark.id == sign.id then
-										for _, s in ipairs(result) do
-											if s.location then -- SymbolInformation type
-												s.range = s.location.range
-											end
-											local r = s.range
-											if
-												utils.is_position_in_range(sign.lnum - 1, r.start.line, r["end"].line)
-											then
-												matched = true
-												local new_offset = sign.lnum - r.start.line - 1
-												table.remove(bookmarks, i)
-												local l3 = ensure_path_valid(file_name, s.kind, s.name, new_offset)
-												-- Don't set the mark.id to sign.id, leave it since otherwise that may
-												-- cause this mark be processed mutliple times. The mark.id will be set
-												-- when displaying.
-												table.insert(l3[tostring(new_offset)], {
-													range = {
-														r.start.line,
-														r["end"].line,
-														r.start.character,
-														r["end"].character,
-													},
-													col = mark.col,
-													text = vim.api.nvim_buf_get_lines(
-														bufnr,
+					for kind, kind_symbols in pairs(M.bookmarks[file_name]) do
+						-- First calibrate the plain mark which may not correct due to modified file
+						if kind == M.plain_magic then
+							for i = #kind_symbols, 1, -1 do
+								local mark = kind_symbols[i]
+								if mark.id == sign.id then
+									matched = true
+									mark.line = sign.lnum
+									mark.text = vim.api.nvim_buf_get_lines(bufnr, sign.lnum - 1, sign.lnum, false)[1]
+								end
+							end
+						else
+							for _, name_symbols in pairs(kind_symbols) do
+								for _, bookmarks in pairs(name_symbols) do
+									-- We should iterate reversely since removing entry
+									-- from the array will result in unexpected behavior
+									for i = #bookmarks, 1, -1 do
+										local mark = bookmarks[i]
+										if mark.id == sign.id then
+											for _, s in ipairs(result) do
+												if s.location then -- SymbolInformation type
+													s.range = s.location.range
+												end
+												local r = s.range
+												if
+													utils.is_position_in_range(
 														sign.lnum - 1,
-														sign.lnum,
-														false
-													)[1],
-													comment = mark.comment,
-													details = s.details,
-													symbol_text = utils.remove_blanks(
-														table.concat(
-															utils.get_text(
-																r.start.line + 1,
-																r["end"].line + 1,
-																r.start.character,
-																r["end"].character,
-																bufnr
-															),
-															""
-														)
-													),
-													calibrated = true,
-												})
+														r.start.line,
+														r["end"].line
+													)
+												then
+													matched = true
+													local new_offset = sign.lnum - r.start.line - 1
+													table.remove(bookmarks, i)
+													local l3 = ensure_path_valid(file_name, s.kind, s.name, new_offset)
+													-- Don't set the mark.id to sign.id, leave it since otherwise that may
+													-- cause this mark be processed mutliple times. The mark.id will be set
+													-- when displaying.
+													table.insert(l3[tostring(new_offset)], {
+														range = {
+															r.start.line,
+															r["end"].line,
+															r.start.character,
+															r["end"].character,
+														},
+														col = mark.col,
+														text = vim.api.nvim_buf_get_lines(
+															bufnr,
+															sign.lnum - 1,
+															sign.lnum,
+															false
+														)[1],
+														comment = mark.comment,
+														details = s.details,
+														symbol_text = utils.remove_blanks(
+															table.concat(
+																utils.get_text(
+																	r.start.line + 1,
+																	r["end"].line + 1,
+																	r.start.character,
+																	r["end"].character,
+																	bufnr
+																),
+																""
+															)
+														),
+														calibrated = true,
+													})
+												end
 											end
 										end
 									end
@@ -230,19 +256,28 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 				-- Althrough after this sign is processed we won't hit the mark.id == sign.id case,
 				-- we still shouldn't assign the mark.id with sign.id since we better to keep it consistent
 				if not matched then
+					-- true create a lsp mark, else create a plain mark
+					local match_symbol = false
 					for _, s in ipairs(result) do
 						if s.location then -- SymbolInformation type
 							s.range = s.location.range
 						end
 						local r = s.range
 						if utils.is_position_in_range(sign.lnum - 1, r.start.line, r["end"].line) then
+							match_symbol = true
 							create_bookmark(s, sign.lnum, 0, sign_info[tostring(sign.id)] or "")
+							sign_info[tostring(sign.id)] = nil
 						end
+					end
+
+					-- Create plain mark
+					if not match_symbol then
+						create_bookmark(nil, sign.lnum, 0, sign_info[tostring(sign.id)] or "")
+						sign_info[tostring(sign.id)] = nil
 					end
 				end
 			end
 		end
-		sign_info = {}
 		-- Fallback to calibrate each mark using LSP information.
 		--
 		-- Not all bookmarks will get calibrated in the first phase using signs,
@@ -252,58 +287,62 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 		-- such as line text and symbol text.
 		if M.bookmarks[file_name] ~= nil then
 			for kind, kind_symbols in pairs(M.bookmarks[file_name]) do
-				for name, name_symbols in pairs(kind_symbols) do
-					-- Get all LSP symbols with the same kind and name
-					local same_name_symbols = {}
-					for _, s in ipairs(result) do
-						if s.name == name and tostring(s.kind) == kind then
-							table.insert(same_name_symbols, s)
+				if kind ~= M.plain_magic then
+					for name, name_symbols in pairs(kind_symbols) do
+						-- Get all LSP symbols with the same kind and name
+						local same_name_symbols = {}
+						for _, s in ipairs(result) do
+							if s.name == name and tostring(s.kind) == kind then
+								table.insert(same_name_symbols, s)
+							end
 						end
-					end
-					-- Delete the marks if it doesn't match any symbol.
-					-- We don't need to delete the sign since it will be cleared
-					-- when calling display()
-					if vim.tbl_isempty(same_name_symbols) then
-						kind_symbols[name] = nil
-					else
-						-- Find the most suitable LSP symbol for each mark
-						for offset, bookmarks in pairs(name_symbols) do
-							for i = #bookmarks, 1, -1 do
-								local mark = bookmarks[i]
-								if not mark.calibrated then
-									local idx = match(same_name_symbols, mark)
-									local symbol = same_name_symbols[idx]
-									local r = symbol.range
+						-- Delete the marks if it doesn't match any symbol.
+						-- We don't need to delete the sign since it will be cleared
+						-- when calling display()
+						if vim.tbl_isempty(same_name_symbols) then
+							kind_symbols[name] = nil
+						else
+							-- Find the most suitable LSP symbol for each mark
+							for offset, bookmarks in pairs(name_symbols) do
+								for i = #bookmarks, 1, -1 do
+									local mark = bookmarks[i]
+									if not mark.calibrated then
+										local idx = match(same_name_symbols, mark)
+										local symbol = same_name_symbols[idx]
+										local r = symbol.range
 
-									if tonumber(offset) > (r["end"].line - r.start.line) then
-										table.remove(bookmarks, i)
-									else
-										-- This mark doesn't have a related sign, so set it to nil explicitly
-										mark.id = nil
-										mark.range = {
-											r.start.line,
-											r["end"].line,
-											r.start.character,
-											r["end"].character,
-										}
-										mark.details = symbol.details
-										local line = tonumber(offset) + r.start.line + 1
-										mark.text = vim.api.nvim_buf_get_lines(bufnr, line - 1, line, false)[1]
-										mark.symbol_text = utils.remove_blanks(
-											table.concat(
-												utils.get_text(
-													r.start.line + 1,
-													r["end"].line + 1,
-													r.start.character,
-													r["end"].character,
-													bufnr
-												),
-												""
+										if tonumber(offset) > (r["end"].line - r.start.line) then
+											table.remove(bookmarks, i)
+										else
+											-- This mark doesn't have a related sign, so set it to nil explicitly
+											mark.id = nil
+											mark.range = {
+												r.start.line,
+												r["end"].line,
+												r.start.character,
+												r["end"].character,
+											}
+											mark.details = symbol.details
+											local line = tonumber(offset) + r.start.line + 1
+											mark.text = vim.api.nvim_buf_get_lines(bufnr, line - 1, line, false)[1]
+											mark.symbol_text = utils.remove_blanks(
+												table.concat(
+													utils.get_text(
+														r.start.line + 1,
+														r["end"].line + 1,
+														r.start.character,
+														r["end"].character,
+														bufnr
+													),
+													""
+												)
 											)
-										)
+										end
 									end
+									-- reset all lsp marks' calibrated to false,
+									-- plain marks don't need this field
+									mark.calibrated = false
 								end
-								mark.calibrated = false
 							end
 						end
 					end
@@ -311,37 +350,41 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 			end
 		end
 		utils.clear_empty_tables(M.bookmarks)
-		M.save_bookmarks()
 		M.display_bookmarks(bufnr)
+		M.save_bookmarks()
 	end
+
 	local params = vim.lsp.util.make_position_params()
 
 	if async then
-		vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(result)
-			if not result or vim.tbl_isempty(result) or not result[1] then
-				print("Empty LSP result.")
-				return
-			end
-			result = result[1].result
-			helper(result)
-		end)
+		local clients = vim.lsp.get_clients({ bufnr = bufnr })
+		if vim.tbl_isempty(clients) then
+			helper({})
+		else
+			vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(result)
+				if not result or vim.tbl_isempty(result) or not result[1] then
+					helper({})
+					return
+				end
+				result = result[1].result
+				helper(result)
+			end)
+		end
 	else
 		local result, err = vim.lsp.buf_request_sync(bufnr, "textDocument/documentSymbol", params, 1000)
 		if err then
-			print("Some errors when getting semantic tokens: ", err)
+			helper({})
 			return
 		end
 		if not result or vim.tbl_isempty(result) then
-			print("Empty LSP result.")
+			helper({})
 			return
 		end
 
 		-- calibrate
-		for client_id, response in pairs(result) do
+		for _, response in pairs(result) do
 			if response.result then
 				helper(response.result)
-			elseif response.error then
-				print("Error from client ID: ", client_id, response.error)
 			end
 		end
 	end
@@ -349,12 +392,22 @@ end
 
 local function get_mark_from_id(id)
 	local file_name = vim.api.nvim_buf_get_name(0)
-	for _, kind_symbols in pairs(M.bookmarks[file_name]) do
-		for _, name_symbols in pairs(kind_symbols) do
-			for _, marks in pairs(name_symbols) do
-				for index, mark in ipairs(marks) do
+	if M.bookmarks[file_name] ~= nil then
+		for kind, kind_symbols in pairs(M.bookmarks[file_name]) do
+			if kind == M.plain_magic then
+				for index, mark in ipairs(kind_symbols) do
 					if mark.id == id then
-						return { marks = marks, index = index }
+						return { marks = kind_symbols, index = index }
+					end
+				end
+			else
+				for _, name_symbols in pairs(kind_symbols) do
+					for _, marks in pairs(name_symbols) do
+						for index, mark in ipairs(marks) do
+							if mark.id == id then
+								return { marks = marks, index = index }
+							end
+						end
 					end
 				end
 			end
@@ -379,10 +432,7 @@ function M.display_bookmarks(bufnr)
 	if bufnr == 0 then
 		bufnr = vim.api.nvim_get_current_buf()
 	end
-	if vim.fn.sign_getdefined(sign_name) == nil or #vim.fn.sign_getdefined(sign_name) == 0 then
-		vim.fn.sign_define(sign_name, { text = icon, texthl = "LspMark", numhl = "LspMark" })
-	end
-
+	ensure_sign_defined()
 	vim.fn.sign_unplace(icon_group, { buffer = bufnr })
 	vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
@@ -392,21 +442,40 @@ function M.display_bookmarks(bufnr)
 		return
 	end
 
-	for _, kind_symbols in pairs(M.bookmarks[file_name]) do
-		for _, name_symbols in pairs(kind_symbols) do
-			for offset, marks in pairs(name_symbols) do
-				for _, mark in ipairs(marks) do
-					local start_line = mark.range[1] -- Convert to 1-based indexing
+	for kind, kind_symbols in pairs(M.bookmarks[file_name]) do
+		if kind == M.plain_magic then
+			for _, mark in ipairs(kind_symbols) do
+				local id = vim.fn.sign_place(0, icon_group, sign_name, bufnr, { lnum = mark.line, priority = 100 })
+				mark.id = id
 
-					local line = start_line + tonumber(offset)
-					local id = vim.fn.sign_place(0, icon_group, sign_name, bufnr, { lnum = line + 1, priority = 100 })
-					mark.id = id
+				local comment = utils.string_truncate(mark.comment, 15)
+				local col = create_right_aligned_highlight(comment, -1)
+				virt_text_opts.virt_text_win_col = col
+				virt_text_opts.virt_text[1][1] = comment
+				vim.api.nvim_buf_set_extmark(bufnr, ns_id, mark.line - 1, 0, virt_text_opts)
+			end
+		else
+			for _, name_symbols in pairs(kind_symbols) do
+				for offset, marks in pairs(name_symbols) do
+					for _, mark in ipairs(marks) do
+						local start_line = mark.range[1] -- Convert to 1-based indexing
 
-					local comment = utils.string_truncate(mark.comment, 15)
-					local col = create_right_aligned_highlight(comment, -1)
-					virt_text_opts.virt_text_win_col = col
-					virt_text_opts.virt_text[1][1] = comment
-					vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, 0, virt_text_opts)
+						local line = start_line + tonumber(offset)
+						local id = vim.fn.sign_place(
+							0,
+							icon_group,
+							sign_name,
+							bufnr,
+							{ lnum = line + 1, priority = 100 }
+						)
+						mark.id = id
+
+						local comment = utils.string_truncate(mark.comment, 15)
+						local col = create_right_aligned_highlight(comment, -1)
+						virt_text_opts.virt_text_win_col = col
+						virt_text_opts.virt_text[1][1] = comment
+						vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, 0, virt_text_opts)
+					end
 				end
 			end
 		end
@@ -461,13 +530,11 @@ local function modify_comment(id)
 	end
 	vim.ui.input({ prompt = "Input new comment: ", default = default_input }, function(input)
 		-- Modify the comment on a sign that just pasted currently doesn't have a mark
-		if input ~= nil then
-			sign_info[tostring(id)] = input
-		end
+		sign_info[tostring(id)] = input or ""
 
 		-- Modify the comment of an existing mark
 		if res ~= nil then
-			res.marks[res.index].comment = input
+			res.marks[res.index].comment = input or ""
 		end
 	end)
 end
@@ -479,15 +546,16 @@ function M.toggle_bookmark(opts)
 		with_comment = opts.with_comment
 	end
 
-	M.lsp_calibrate_bookmarks(nil, false)
+	if vim.api.nvim_get_option_value("modified", { buf = bufnr }) then
+		M.lsp_calibrate_bookmarks(nil, false)
+	end
+
 	local line = vim.api.nvim_win_get_cursor(0)[1]
 	local id = has_bookmark()
 	if id ~= false then
 		delete_bookmark()
 	else
-		if vim.fn.sign_getdefined(sign_name) == nil or #vim.fn.sign_getdefined(sign_name) == 0 then
-			vim.fn.sign_define(sign_name, { text = icon, texthl = "LspMark", numhl = "LspMark" })
-		end
+		ensure_sign_defined()
 		id = vim.fn.sign_place(0, icon_group, sign_name, bufnr, { lnum = line, priority = 100 })
 		if with_comment then
 			modify_comment(id)
@@ -497,7 +565,10 @@ function M.toggle_bookmark(opts)
 end
 
 function M.modify_comment()
-	M.lsp_calibrate_bookmarks(nil, false)
+	local bufnr = vim.api.nvim_get_current_buf()
+	if vim.api.nvim_get_option_value("modified", { buf = bufnr }) then
+		M.lsp_calibrate_bookmarks(nil, false)
+	end
 	local id = has_bookmark()
 	if id ~= false then
 		modify_comment(id)
@@ -536,6 +607,12 @@ end
 
 local function on_buf_enter(event)
 	M.display_bookmarks(event.buf)
+end
+
+local function on_buf_leave(event)
+	-- We need to calibrate before leaving a buffer
+	-- since it may be modified.
+	M.lsp_calibrate_bookmarks(event.buf)
 end
 
 local function on_buf_write_post(event)
@@ -591,9 +668,7 @@ function M.paste_text()
 			local cursor = vim.api.nvim_win_get_cursor(0)
 			local bufnr = vim.api.nvim_get_current_buf()
 			vim.api.nvim_put(utils.split_text(M.text), M.mode, true, false)
-			if vim.fn.sign_getdefined(sign_name) == nil or #vim.fn.sign_getdefined(sign_name) == 0 then
-				vim.fn.sign_define(sign_name, { text = icon, texthl = "LspMark", numhl = "LspMark" })
-			end
+			ensure_sign_defined()
 			for _, mark in ipairs(M.marks_in_selection) do
 				local line
 				if M.mode == "l" then
@@ -650,6 +725,10 @@ function M.setup()
 	})
 	vim.api.nvim_create_autocmd({ "BufEnter" }, {
 		callback = on_buf_enter,
+		pattern = { "*" },
+	})
+	vim.api.nvim_create_autocmd({ "BufLeave" }, {
+		callback = on_buf_leave,
 		pattern = { "*" },
 	})
 	vim.api.nvim_create_autocmd({ "BufWritePost" }, {
