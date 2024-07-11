@@ -20,12 +20,24 @@ local virt_text_opts = {
 	undo_restore = true,
 }
 
+-- SymbolInformation type will have symbol.location.range
+-- rather than symbol.range, keep them consistent.
+local function ensure_lsp_symbol_range(symbol)
+	if symbol.location then -- SymbolInformation type
+		symbol.range = symbol.location.range
+	end
+	return symbol.range
+end
+
 local function ensure_sign_defined()
 	if vim.fn.sign_getdefined(sign_name) == nil or #vim.fn.sign_getdefined(sign_name) == 0 then
 		vim.fn.sign_define(sign_name, { text = icon, texthl = "LspMark", numhl = "LspMark" })
 	end
 end
 
+-- 2 types of path:
+--  1. LSP mark path: bookmarks[file_name][kind][name][offset][index]
+--  2. Plain mark path: bookmarks[file_name][kind][index]
 local function ensure_path_valid(file_name, kind, name, offset)
 	if not M.bookmarks[file_name] then
 		M.bookmarks[file_name] = {}
@@ -50,25 +62,23 @@ end
 
 local function create_bookmark(symbol, line, col, with_comment)
 	local file_name = vim.api.nvim_buf_get_name(0)
+	-- Create a plain bookmark
 	if symbol == nil then
 		local l1 = ensure_path_valid(file_name, M.plain_magic)
-		table.insert(l1[M.plain_magic], {
+		local mark = {
 			line = line,
 			col = col,
 			text = vim.api.nvim_buf_get_lines(0, line - 1, line, false)[1],
 			comment = with_comment,
-		})
-		return
+		}
+		table.insert(l1[M.plain_magic], mark)
+		return mark
 	end
 
-	if symbol.location then -- SymbolInformation type
-		symbol.range = symbol.location.range
-	end
-	local r = symbol.range
-
+	local r = ensure_lsp_symbol_range(symbol)
 	local offset, character = line - r.start.line - 1, col
 	local l3 = ensure_path_valid(file_name, symbol.kind, symbol.name, offset)
-	table.insert(l3[tostring(offset)], {
+	local mark = {
 		range = {
 			r.start.line,
 			r["end"].line,
@@ -82,8 +92,9 @@ local function create_bookmark(symbol, line, col, with_comment)
 		symbol_text = utils.remove_blanks(
 			table.concat(utils.get_text(r.start.line + 1, r["end"].line + 1, r.start.character, r["end"].character), "")
 		),
-		calibrated = true,
-	})
+	}
+	table.insert(l3[tostring(offset)], mark)
+	return mark
 end
 
 local function match(lsp_symbols, mark)
@@ -122,10 +133,7 @@ local function match(lsp_symbols, mark)
 	index = 0
 	min = 2147483647
 	for i, symbol in ipairs(lsp_symbols) do
-		if symbol.location then -- SymbolInformation type
-			symbol.range = symbol.location.range
-		end
-		local r = symbol.range
+		local r = ensure_lsp_symbol_range(symbol)
 		local lsp_text = table.concat(
 			utils.get_text(r.start.line + 1, r["end"].line + 1, r.start.character, r["end"].character),
 			""
@@ -258,6 +266,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 				if not matched then
 					-- true create a lsp mark, else create a plain mark
 					local match_symbol = false
+					-- Try best to create a lsp mark, fallback to a plain mark
 					for _, s in ipairs(result) do
 						if s.location then -- SymbolInformation type
 							s.range = s.location.range
@@ -265,14 +274,22 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 						local r = s.range
 						if utils.is_position_in_range(sign.lnum - 1, r.start.line, r["end"].line) then
 							match_symbol = true
-							create_bookmark(s, sign.lnum, 0, sign_info[tostring(sign.id)] or "")
+							local mark = create_bookmark(s, sign.lnum, 0, sign_info[tostring(sign.id)] or "")
+							-- Fresh new bookmark, don't need to calibrate it again
+							mark.calibrated = true
+							-- The sign is created after creating/pasting, delete the sign info after
+							-- the bookmark is created.
 							sign_info[tostring(sign.id)] = nil
 						end
 					end
 
 					-- Create plain mark
 					if not match_symbol then
-						create_bookmark(nil, sign.lnum, 0, sign_info[tostring(sign.id)] or "")
+						local mark = create_bookmark(nil, sign.lnum, 0, sign_info[tostring(sign.id)] or "")
+						-- Fresh new bookmark, don't need to calibrate it again
+						mark.calibrated = true
+						-- The sign is created after creating/pasting, delete the sign info after
+						-- the bookmark is created.
 						sign_info[tostring(sign.id)] = nil
 					end
 				end
@@ -359,6 +376,8 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 	if async then
 		local clients = vim.lsp.get_clients({ bufnr = bufnr })
 		if vim.tbl_isempty(clients) then
+			-- Only calibrate the plain bookmarks,
+			-- this will delete all the lsp bookmarks.
 			helper({})
 		else
 			vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(result)
@@ -385,6 +404,8 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 		for _, response in pairs(result) do
 			if response.result then
 				helper(response.result)
+				-- Currently 1 client is enough
+				return
 			end
 		end
 	end
@@ -417,7 +438,9 @@ end
 
 local function delete_id(id)
 	local res = get_mark_from_id(id)
-	table.remove(res.marks, res.index)
+	if res ~= nil then
+		table.remove(res.marks, res.index)
+	end
 	utils.clear_empty_tables(M.bookmarks)
 end
 
@@ -491,11 +514,13 @@ local function delete_bookmark()
 			if sign.lnum == cursor[1] then
 				delete_id(sign.id)
 				vim.fn.sign_unplace(icon_group, { buffer = bufnr, id = sign.id })
+				vim.api.nvim_buf_clear_namespace(bufnr, ns_id, sign.lnum - 1, sign.lnum)
 			end
 		end
 	end
 
-	M.lsp_calibrate_bookmarks()
+	M.save_bookmarks()
+	-- We don't need to calibrate here, since we change from a consistent state to another
 end
 
 -- Do we have a bookmark in current cursor? We judge
@@ -580,17 +605,18 @@ function M.modify_comment()
 end
 
 function M.show_comment()
-	local bufnr = vim.api.nvim_get_current_buf()
-
-	if vim.api.nvim_get_option_value("modified", { buf = bufnr }) then
-		print("Could toggle bookmark, please save the buffer first.")
-		return
-	end
-
+	-- Will include newly created/pasted signs
 	local id = has_bookmark()
 	if id ~= false then
-		local res = get_mark_from_id(id)
-		print(res.marks[res.index].comment)
+		-- Newly created/pasted signs
+		if sign_info[tostring(id)] ~= nil then
+			print(sign_info[tostring(id)])
+		else
+			local res = get_mark_from_id(id)
+			if res ~= nil then
+				print(res.marks[res.index].comment)
+			end
+		end
 	else
 		print("Couldn't find a bookmark under the cursor.")
 	end
@@ -636,16 +662,24 @@ local function get_range_texts(start_line, end_line, start_c, end_c)
 	for _, marks in ipairs(extmarks) do
 		for _, sign in ipairs(marks.signs) do
 			if utils.is_position_in_range(sign.lnum, start_line, end_line) then
-				local mark = get_mark_from_id(sign.id)
 				local comment
-				if mark then
-					comment = mark.marks[mark.index].comment
+				-- Although we will calibrate each time when we creating/pasting
+				-- so when deleting here we can ensure the signs are flushed to the bookmarks,
+				-- we still need to be defensive to check if they are flushed not.
+				if sign_info[tostring(sign.id)] ~= nil then
+					comment = sign_info[tostring(sign.id)]
+					sign_info[tostring(sign.id)] = nil
 				else
-					comment = ""
+					local mark = get_mark_from_id(sign.id)
+					if mark then
+						comment = mark.marks[mark.index].comment
+					else
+						comment = ""
+					end
 				end
 				table.insert(M.marks_in_selection, { offset_in_selection = sign.lnum - start_line, comment = comment })
 				delete_id(sign.id)
-				-- Delete virtual text
+				-- The signs will be deleted automatically, so we only need to delete virtual text
 				vim.api.nvim_buf_clear_namespace(bufnr, ns_id, start_line - 1, end_line)
 			end
 		end
