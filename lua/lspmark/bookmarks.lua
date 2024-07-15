@@ -651,6 +651,10 @@ local function on_lsp_attach(event)
 end
 
 local function on_buf_enter(event)
+	-- The reason why we calibrate the bookmarks after entering rather than before leaving
+	-- a buffer is that we don't want to get the modified but not saved file calibrated too early,
+	-- which may cause incorret calibration when we force exit neoivm without saving the modfied
+	-- buffer back to the disk.
 	if vim.api.nvim_get_option_value("modified", { buf = event.buf }) then
 		M.lsp_calibrate_bookmarks(event.buf, false, M.bookmark_file)
 	end
