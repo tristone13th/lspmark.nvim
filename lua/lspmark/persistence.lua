@@ -29,11 +29,11 @@ function M.load()
 
 	file:close()
 
-	return vim.fn.json_decode(content)
+	return vim.fn.json_decode(content), bookmark_file
 end
 
-function M.save(bookmarks)
-	local bookmark_file = M.get_bookmark_file()
+function M.save(bookmarks, bm_file)
+	local bookmark_file = bm_file or M.get_bookmark_file()
 
 	if not utils.directory_exists(config_dir) then
 		vim.fn.mkdir(config_dir, "p")

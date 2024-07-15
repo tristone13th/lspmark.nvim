@@ -2,6 +2,7 @@ local M = {}
 local persistence = require("lspmark.persistence")
 local utils = require("lspmark.utils")
 
+M.bookmark_file = nil
 M.bookmarks = {}
 M.text = nil
 M.yanked = false
@@ -153,7 +154,10 @@ end
 --      sign/symbol information which is up-to-date.
 --   2. Rough calibration: calibrate each mark's other stuffs only using LSP symbol
 --      information when it doesn't have a corresponding sign.
-function M.lsp_calibrate_bookmarks(bufnr, async)
+-- Be careful that sometimes you call this function in a directory (such as when bufleave)
+-- but the async result returns in another directory. Current we use bookmark_file to
+-- identify this.
+function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 	if bufnr == nil or bufnr == 0 then
 		bufnr = vim.api.nvim_get_current_buf()
 	end
@@ -368,7 +372,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 		end
 		utils.clear_empty_tables(M.bookmarks)
 		M.display_bookmarks(bufnr)
-		M.save_bookmarks()
+		M.save_bookmarks(bookmark_file)
 	end
 
 	local params = vim.lsp.util.make_position_params()
@@ -381,12 +385,21 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 			helper({})
 		else
 			vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(result)
-				if not result or vim.tbl_isempty(result) or not result[1] then
+				-- When result arrive, we have moved to a new folder, so do nothing.
+				--bookmark_file is nil at first time.
+				if bookmark_file and bookmark_file ~= persistence.get_bookmark_file() then
+					return
+				end
+				if not result or vim.tbl_isempty(result) then
 					helper({})
 					return
 				end
-				result = result[1].result
-				helper(result)
+				for _, res in pairs(result) do
+					if res ~= nil and res.result ~= nil then
+						helper(res.result)
+						return
+					end
+				end
 			end)
 		end
 	else
@@ -402,7 +415,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async)
 
 		-- calibrate
 		for _, response in pairs(result) do
-			if response.result then
+			if response.result ~= nil then
 				helper(response.result)
 				-- Currently 1 client is enough
 				return
@@ -465,17 +478,20 @@ function M.display_bookmarks(bufnr)
 		return
 	end
 
+	local line_count = vim.api.nvim_buf_line_count(bufnr)
 	for kind, kind_symbols in pairs(M.bookmarks[file_name]) do
 		if kind == M.plain_magic then
 			for _, mark in ipairs(kind_symbols) do
-				local id = vim.fn.sign_place(0, icon_group, sign_name, bufnr, { lnum = mark.line, priority = 100 })
-				mark.id = id
+				if mark.line <= line_count then
+					local id = vim.fn.sign_place(0, icon_group, sign_name, bufnr, { lnum = mark.line, priority = 100 })
+					mark.id = id
 
-				local comment = utils.string_truncate(mark.comment, 15)
-				local col = create_right_aligned_highlight(comment, -1)
-				virt_text_opts.virt_text_win_col = col
-				virt_text_opts.virt_text[1][1] = comment
-				vim.api.nvim_buf_set_extmark(bufnr, ns_id, mark.line - 1, 0, virt_text_opts)
+					local comment = utils.string_truncate(mark.comment, 15)
+					local col = create_right_aligned_highlight(comment, -1)
+					virt_text_opts.virt_text_win_col = col
+					virt_text_opts.virt_text[1][1] = comment
+					vim.api.nvim_buf_set_extmark(bufnr, ns_id, mark.line - 1, 0, virt_text_opts)
+				end
 			end
 		else
 			for _, name_symbols in pairs(kind_symbols) do
@@ -484,20 +500,23 @@ function M.display_bookmarks(bufnr)
 						local start_line = mark.range[1] -- Convert to 1-based indexing
 
 						local line = start_line + tonumber(offset)
-						local id = vim.fn.sign_place(
-							0,
-							icon_group,
-							sign_name,
-							bufnr,
-							{ lnum = line + 1, priority = 100 }
-						)
-						mark.id = id
 
-						local comment = utils.string_truncate(mark.comment, 15)
-						local col = create_right_aligned_highlight(comment, -1)
-						virt_text_opts.virt_text_win_col = col
-						virt_text_opts.virt_text[1][1] = comment
-						vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, 0, virt_text_opts)
+						if line < line_count then
+							local id = vim.fn.sign_place(
+								0,
+								icon_group,
+								sign_name,
+								bufnr,
+								{ lnum = line + 1, priority = 100 }
+							)
+							mark.id = id
+
+							local comment = utils.string_truncate(mark.comment, 15)
+							local col = create_right_aligned_highlight(comment, -1)
+							virt_text_opts.virt_text_win_col = col
+							virt_text_opts.virt_text[1][1] = comment
+							vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, 0, virt_text_opts)
+						end
 					end
 				end
 			end
@@ -572,7 +591,7 @@ function M.toggle_bookmark(opts)
 	end
 
 	if vim.api.nvim_get_option_value("modified", { buf = bufnr }) then
-		M.lsp_calibrate_bookmarks(nil, false)
+		M.lsp_calibrate_bookmarks(nil, false, M.bookmark_file)
 	end
 
 	local line = vim.api.nvim_win_get_cursor(0)[1]
@@ -585,14 +604,14 @@ function M.toggle_bookmark(opts)
 		if with_comment then
 			modify_comment(id)
 		end
-		M.lsp_calibrate_bookmarks()
+		M.lsp_calibrate_bookmarks(nil, true, M.bookmark_file)
 	end
 end
 
 function M.modify_comment()
 	local bufnr = vim.api.nvim_get_current_buf()
 	if vim.api.nvim_get_option_value("modified", { buf = bufnr }) then
-		M.lsp_calibrate_bookmarks(nil, false)
+		M.lsp_calibrate_bookmarks(nil, false, M.bookmark_file)
 	end
 	local id = has_bookmark()
 	if id ~= false then
@@ -601,7 +620,7 @@ function M.modify_comment()
 		print("Couldn't find a bookmark under the cursor.")
 	end
 
-	M.lsp_calibrate_bookmarks()
+	M.lsp_calibrate_bookmarks(nil, true, M.bookmark_file)
 end
 
 function M.show_comment()
@@ -628,29 +647,26 @@ local function on_dir_changed_pre()
 end
 
 local function on_lsp_attach(event)
-	M.lsp_calibrate_bookmarks(event.buf)
+	M.lsp_calibrate_bookmarks(event.buf, true, M.bookmark_file)
 end
 
 local function on_buf_enter(event)
+	if vim.api.nvim_get_option_value("modified", { buf = event.buf }) then
+		M.lsp_calibrate_bookmarks(event.buf, false, M.bookmark_file)
+	end
 	M.display_bookmarks(event.buf)
 end
 
-local function on_buf_leave(event)
-	-- We need to calibrate before leaving a buffer
-	-- since it may be modified.
-	M.lsp_calibrate_bookmarks(event.buf)
-end
-
 local function on_buf_write_post(event)
-	M.lsp_calibrate_bookmarks(event.buf)
+	M.lsp_calibrate_bookmarks(event.buf, true, M.bookmark_file)
 end
 
 function M.load_bookmarks()
-	M.bookmarks = persistence.load()
+	M.bookmarks, M.bookmark_file = persistence.load()
 end
 
-function M.save_bookmarks()
-	persistence.save(M.bookmarks)
+function M.save_bookmarks(bookmark_file)
+	persistence.save(M.bookmarks, bookmark_file)
 end
 
 -- Get the range of texts, delete the bookmarks inside, remove the comment
@@ -715,7 +731,7 @@ function M.paste_text()
 				sign_info[tostring(id)] = mark.comment
 			end
 
-			M.lsp_calibrate_bookmarks(bufnr)
+			M.lsp_calibrate_bookmarks(bufnr, true, M.bookmark_file)
 		end
 	else
 		vim.cmd("normal! p")
@@ -759,10 +775,6 @@ function M.setup()
 	})
 	vim.api.nvim_create_autocmd({ "BufEnter" }, {
 		callback = on_buf_enter,
-		pattern = { "*" },
-	})
-	vim.api.nvim_create_autocmd({ "BufLeave" }, {
-		callback = on_buf_leave,
 		pattern = { "*" },
 	})
 	vim.api.nvim_create_autocmd({ "BufWritePost" }, {

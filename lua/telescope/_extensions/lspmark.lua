@@ -17,7 +17,7 @@ function M.lspmark(opts)
 
 	local bufnr = vim.api.nvim_get_current_buf()
 	if vim.api.nvim_get_option_value("modified", { buf = bufnr }) then
-		bookmarks.lsp_calibrate_bookmarks(bufnr, false)
+		bookmarks.lsp_calibrate_bookmarks(bufnr, false, bookmarks.bookmark_file)
 	end
 
 	local max_file_name_len, max_kind_len, max_symbol_len, max_line_len, max_comment_len = 0, 0, 0, 0, 0
