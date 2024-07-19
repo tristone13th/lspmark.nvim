@@ -127,4 +127,19 @@ function M.clear_empty_tables(t)
 	end
 end
 
+-- Thanks for lualine.nvim
+function M.get_git_head(path)
+	local head_file = path .. "/.git/HEAD"
+	local f_head = io.open(head_file)
+	if f_head then
+		local HEAD = f_head:read()
+		f_head:close()
+		local branch = HEAD:match("ref: refs/heads/(.+)$")
+		if branch then
+			return branch
+		end
+	end
+	return ""
+end
+
 return M

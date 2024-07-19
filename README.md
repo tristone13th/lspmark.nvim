@@ -6,6 +6,7 @@ Notice:
 
 1. If you find any error log reported please try to remove the folder containing persistent files first (on Linux it is `~/.local/share/nvim/lspmark/`) since during the development the internal representation of bookmarks may changed. :-)
 2. Bookmark operations (toggle, modify comment, open telescope, etc.) on modified buffer will be slower, so saving the buffer before performing such operations is a good habit.
+3. Breaking changes will be documented in CHANGELOG.md, check this document if you encounter any issues after updating.
 
 There is a bunch of bookmark plugins but none of them suit my demand, if you also finding a bookmark plugin that can:
 
@@ -15,7 +16,8 @@ There is a bunch of bookmark plugins but none of them suit my demand, if you als
 4. Can be deleted and pasted to other place, even not current file.
 5. Use telescope to browse, jump or delete all the bookmarks.
 6. Add comments to bookmarks for better searching.
-7. …
+7. Organize the bookmarks per git branch automatically.
+8. …
 
 Then not only the bookmarks, but also you, are in the right place. Let me show you the features one by one:
 
@@ -65,16 +67,16 @@ Then not only the bookmarks, but also you, are in the right place. Let me show y
 
 ## Setup & Usage
 
-All you need to do is installing it using your favorite plugin manager and run the following code after installation:
+**First**, install it using your favorite plugin manager and run the following code after installation:
 
 ```lua
 require("lspmark").setup()
 require("telescope").load_extension("lspmark")
 ```
 
-To open the telescope window, you can run `Telescope lspmark`, to delete current selection in the telescope picker, you can press `d`.
+Note: To open the telescope window, you can run `Telescope lspmark`, to delete current selection in the telescope picker, you can press `d`.
 
-You need to bind your keys (or assiociate some commands) to the following APIs to enable partial or all the features:
+**Second**, you need to bind your keys (or assiociate some commands) to the following APIs to enable partial or all the features:
 
 ### `require('lspmark.bookmarks').paste_text()`
 
@@ -101,6 +103,22 @@ This function is used for modifying the comment for the bookmark under the curso
 ### `require('lspmark.bookmarks').show_comment()`
 
 This function is used for showing the entire content for the bookmark under the cursor.
+
+**Third**, Call the following code:
+
+```lua
+-- <new_dir> can be nil, by default it is cwd.
+require("lspmark.bookmarks").load_bookmarks(<new_dir>)
+```
+
+when you switch to a new cwd. Alternatively, you can define the following autocmd:
+
+```lua
+vim.api.nvim_create_autocmd({ "DirChanged" }, {
+    callback = require("lspmark.bookmarks").load_bookmarks,
+    pattern = { "*" },
+})
+```
 
 ## Highlights
 

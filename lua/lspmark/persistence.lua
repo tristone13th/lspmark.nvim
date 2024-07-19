@@ -1,30 +1,33 @@
 local M = {}
 local config_dir = vim.fn.stdpath("data") .. "/lspmark"
 local utils = require("lspmark.utils")
+local magic = "-tRiStOnE13tH-"
 
-function M.get_bookmark_file()
-	local cwd = vim.fn.getcwd()
+function M.get_bookmark_file(dir)
+	local cwd = dir or vim.fn.getcwd()
+	local branch = utils.get_git_head(cwd)
 	local sanitized_cwd = utils.sanitize_path(cwd)
-	return config_dir .. "/" .. sanitized_cwd .. ".json"
+	return config_dir .. "/" .. sanitized_cwd .. magic .. branch .. ".json"
 end
 
-function M.load()
-	local bookmark_file = M.get_bookmark_file()
+function M.load(dir)
+	local bookmark_file = M.get_bookmark_file(dir)
 
 	if not utils.file_exists(bookmark_file) then
-		return {}
+		return {}, bookmark_file
 	end
 
 	local file = io.open(bookmark_file, "r")
 
 	if not file then
-		return {}
+		return {}, bookmark_file
 	end
 
 	local content = file:read("*a")
 
 	if not content then
-		return {}
+		file:close()
+		return {}, bookmark_file
 	end
 
 	file:close()

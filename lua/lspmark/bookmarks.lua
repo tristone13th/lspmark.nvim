@@ -179,7 +179,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 		-- since the sign is always up-to-date (Such as when the buffer is modified).
 		--
 		-- If a sign doesn't have a corresponding mark, then create the lsp/plain mark.
-		-- This relates to the case we pasted the text with marks included.
+		-- This relates to the case we create/paste the text with marks included.
 		local extmarks = vim.fn.sign_getplaced(bufnr, { group = "lspmark" })
 		for _, marks in ipairs(extmarks) do
 			for _, sign in ipairs(marks.signs) do
@@ -665,8 +665,8 @@ local function on_buf_write_post(event)
 	M.lsp_calibrate_bookmarks(event.buf, true, M.bookmark_file)
 end
 
-function M.load_bookmarks()
-	M.bookmarks, M.bookmark_file = persistence.load()
+function M.load_bookmarks(dir)
+	M.bookmarks, M.bookmark_file = persistence.load(dir)
 end
 
 function M.save_bookmarks(bookmark_file)
@@ -766,13 +766,6 @@ function M.setup()
 		callback = on_dir_changed_pre,
 		pattern = { "*" },
 	})
-	-- Include the case when session is loaded since that will also change the cwd.
-	-- Will trigger when vim is launched and load the session
-	vim.api.nvim_create_autocmd({ "DirChanged" }, {
-		callback = M.load_bookmarks,
-		pattern = { "*" },
-	})
-	-- Lazy calibration
 	vim.api.nvim_create_autocmd({ "LspAttach" }, {
 		callback = on_lsp_attach,
 		pattern = { "*" },
