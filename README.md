@@ -2,11 +2,12 @@
 
 A Sane[^1] Project-wise[^2] Bookmarks Plugin with Persistent[^3] Storage Based on LSP[^4] for Neovim.
 
+>**Important**: Breaking changes will be documented in [CHANGELOG.md](https://github.com/tristone13th/lspmark.nvim/blob/main/CHANGELOG.md), check this document if you encounter any issues after updating.
+
 Notice:
 
 1. If you find any error log reported please try to remove the folder containing persistent files first (on Linux it is `~/.local/share/nvim/lspmark/`) since during the development the internal representation of bookmarks may changed. :-)
 2. Bookmark operations (toggle, modify comment, open telescope, etc.) on modified buffer will be slower, so saving the buffer before performing such operations is a good habit.
-3. Breaking changes will be documented in CHANGELOG.md, check this document if you encounter any issues after updating.
 
 There is a bunch of bookmark plugins but none of them suit my demand, if you also finding a bookmark plugin that can:
 
