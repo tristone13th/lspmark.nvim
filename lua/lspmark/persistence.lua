@@ -5,6 +5,7 @@ local magic = "-tRiStOnE13tH-"
 
 function M.get_bookmark_file(dir)
 	local cwd = dir or vim.fn.getcwd()
+	cwd = string.gsub(cwd, "/$", "")
 	local branch = utils.get_git_head(cwd)
 	local sanitized_cwd = utils.sanitize_path(cwd)
 	return config_dir .. "/" .. sanitized_cwd .. magic .. branch .. ".json"
