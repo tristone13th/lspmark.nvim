@@ -6,9 +6,9 @@ local magic = "-tRiStOnE13tH-"
 function M.get_bookmark_file(dir)
 	local cwd = dir or vim.fn.getcwd()
 	cwd = string.gsub(cwd, "/$", "")
-	local branch = utils.get_git_head(cwd)
+	local sanitized_branch = utils.sanitize_path(utils.get_git_head(cwd))
 	local sanitized_cwd = utils.sanitize_path(cwd)
-	return config_dir .. "/" .. sanitized_cwd .. magic .. branch .. ".json"
+	return config_dir .. "/" .. sanitized_cwd .. magic .. sanitized_branch .. ".json"
 end
 
 function M.load(dir)
@@ -46,6 +46,7 @@ function M.save(bookmarks, bm_file)
 	local file = io.open(bookmark_file, "w")
 
 	if not file then
+		print(bookmark_file)
 		print("Failed to save the bookmarks to file.")
 		return
 	end
