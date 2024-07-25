@@ -2,7 +2,7 @@
 
 A Sane[^1] Project-wise[^2] Bookmarks Plugin with Persistent[^3] Storage Based on LSP[^4] for Neovim.
 
->**Important**: Breaking changes will be documented in [CHANGELOG.md](https://github.com/tristone13th/lspmark.nvim/blob/main/CHANGELOG.md), check this document if you encounter any issues after updating.
+>**Important**: 🚧 This plugin is being developed in progress so breaking changes are expected. Breaking changes will be documented in [CHANGELOG.md](https://github.com/tristone13th/lspmark.nvim/blob/main/CHANGELOG.md), check this document if you encounter any issues after updating.
 
 Notice:
 
