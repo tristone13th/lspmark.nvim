@@ -62,7 +62,7 @@ local function ensure_path_valid(file_name, kind, name, offset)
 end
 
 local function create_bookmark(symbol, line, col, with_comment)
-	local file_name = vim.api.nvim_buf_get_name(0)
+	local file_name = utils.standarize_path(vim.api.nvim_buf_get_name(0))
 	-- Create a plain bookmark
 	if symbol == nil then
 		local l1 = ensure_path_valid(file_name, M.plain_magic)
@@ -164,7 +164,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 	if async == nil then
 		async = true
 	end
-	local file_name = vim.api.nvim_buf_get_name(bufnr)
+	local file_name = utils.standarize_path(vim.api.nvim_buf_get_name(bufnr))
 
 	-- Don't send the request to LSP server if both are empty
 	utils.clear_empty_tables(M.bookmarks)
@@ -425,7 +425,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 end
 
 local function get_mark_from_id(id)
-	local file_name = vim.api.nvim_buf_get_name(0)
+	local file_name = utils.standarize_path(vim.api.nvim_buf_get_name(0))
 	if M.bookmarks[file_name] ~= nil then
 		for kind, kind_symbols in pairs(M.bookmarks[file_name]) do
 			if kind == M.plain_magic then
@@ -472,7 +472,7 @@ function M.display_bookmarks(bufnr)
 	vim.fn.sign_unplace(icon_group, { buffer = bufnr })
 	vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
-	local file_name = vim.api.nvim_buf_get_name(bufnr)
+	local file_name = utils.standarize_path(vim.api.nvim_buf_get_name(bufnr))
 
 	if not M.bookmarks[file_name] then
 		return

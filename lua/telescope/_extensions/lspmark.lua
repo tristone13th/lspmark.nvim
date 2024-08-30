@@ -22,7 +22,7 @@ function M.lspmark(opts)
 
 	local max_file_name_len, max_kind_len, max_symbol_len, max_line_len, max_comment_len = 0, 0, 0, 0, 0
 	for file_name, kinds in pairs(bookmarks.bookmarks) do
-		max_file_name_len = math.max(string.len(file_name:match("^.+/(.+)$")), max_file_name_len)
+		max_file_name_len = math.max(string.len(utils.get_file_name(file_name)), max_file_name_len)
 		for kind, name_symbols in pairs(kinds) do
 			if kind == bookmarks.plain_magic then
 				max_kind_len = math.max(string.len(kind), max_kind_len)
@@ -90,7 +90,7 @@ function M.lspmark(opts)
 		finder = finders.new_table({
 			results = results,
 			entry_maker = function(entry)
-				local file_name = entry.filename:match("^.+/(.+)$")
+				local file_name = utils.get_file_name(entry.filename)
 				return {
 					display = function()
 						return display({

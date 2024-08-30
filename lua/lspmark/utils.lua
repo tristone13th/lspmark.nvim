@@ -35,7 +35,7 @@ function M.get_buffers_for_file(file_path)
 	local buffers = vim.api.nvim_list_bufs()
 
 	for _, buf in ipairs(buffers) do
-		local buf_name = vim.api.nvim_buf_get_name(buf)
+		local buf_name = M.standarize_path(vim.api.nvim_buf_get_name(buf))
 		if buf_name == file_path then
 			table.insert(matching_buffers, buf)
 		end
@@ -140,6 +140,33 @@ function M.get_git_head(path)
 		end
 	end
 	return ""
+end 
+
+-- Some neovim APIs provide inconsistent path slashes, see this:
+-- https://github.com/neovim/neovim/issues/23639
+-- We need to standarize it before using it. 
+function M.standarize_path(file_path)
+    -- On linux, everything is fine so we don't need to change anything
+    if vim.fn.has("unix") == 0 then
+    	file_path = file_path:gsub("\\\\", "/")
+    	file_path = file_path:gsub("/", "\\")
+    	file_path = file_path:gsub("^c:", "C:")
+    end
+    return file_path
+end
+
+-- Get filename from a path, e.g.,
+-- dllmain.cpp from
+-- C:\Users\trist\Documents\GitHub\dllmain.cpp
+function M.get_file_name(file_name)
+    local res = file_name:match("^.+\\(.+)$")
+    if res == nil then
+        -- We suppose all the paths are valid,
+        -- if on Windows we cannot match, then the
+        -- file_name must have been standarized to linux style
+        res = file_name:match("^.+/(.+)$")
+    end
+    return res
 end
 
 return M
