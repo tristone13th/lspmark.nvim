@@ -135,10 +135,8 @@ local function match(lsp_symbols, mark)
 	min = 2147483647
 	for i, symbol in ipairs(lsp_symbols) do
 		local r = ensure_lsp_symbol_range(symbol)
-		local lsp_text = table.concat(
-			utils.get_text(r.start.line + 1, r["end"].line + 1, r.start.character, r["end"].character),
-			""
-		)
+		local lsp_text =
+			table.concat(utils.get_text(r.start.line + 1, r["end"].line + 1, r.start.character, r["end"].character), "")
 		lsp_text = utils.remove_blanks(lsp_text)
 		local s = utils.levenshtein(mark.symbol_text, lsp_text)
 		if s < min then
@@ -375,7 +373,9 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 		M.save_bookmarks(bookmark_file)
 	end
 
-	local params = vim.lsp.util.make_position_params()
+	local params_func = function(client, _)
+		return vim.lsp.util.make_position_params(0, client.offset_encoding)
+	end
 
 	if async then
 		local clients = vim.lsp.get_clients({ bufnr = bufnr })
@@ -384,7 +384,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 			-- this will delete all the lsp bookmarks.
 			helper({})
 		else
-			vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(result)
+			vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params_func, function(result)
 				-- When result arrive, we have moved to a new folder, so do nothing.
 				--bookmark_file is nil at first time.
 				if bookmark_file and bookmark_file ~= persistence.get_bookmark_file() then
@@ -502,13 +502,8 @@ function M.display_bookmarks(bufnr)
 						local line = start_line + tonumber(offset)
 
 						if line < line_count then
-							local id = vim.fn.sign_place(
-								0,
-								icon_group,
-								sign_name,
-								bufnr,
-								{ lnum = line + 1, priority = 100 }
-							)
+							local id =
+								vim.fn.sign_place(0, icon_group, sign_name, bufnr, { lnum = line + 1, priority = 100 })
 							mark.id = id
 
 							local comment = utils.string_truncate(mark.comment, 15)
