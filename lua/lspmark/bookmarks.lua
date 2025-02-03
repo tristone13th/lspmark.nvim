@@ -373,10 +373,6 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 		M.save_bookmarks(bookmark_file)
 	end
 
-	local params_func = function(client, _)
-		return vim.lsp.util.make_position_params(0, client.offset_encoding)
-	end
-
 	if async then
 		local clients = vim.lsp.get_clients({ bufnr = bufnr })
 		if vim.tbl_isempty(clients) then
@@ -384,7 +380,8 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 			-- this will delete all the lsp bookmarks.
 			helper({})
 		else
-			vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params_func, function(result)
+			local params = vim.lsp.util.make_position_params()
+			vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(result)
 				-- When result arrive, we have moved to a new folder, so do nothing.
 				--bookmark_file is nil at first time.
 				if bookmark_file and bookmark_file ~= persistence.get_bookmark_file() then
