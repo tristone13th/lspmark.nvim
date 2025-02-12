@@ -119,12 +119,12 @@ function M.lspmark(opts)
 		attach_mappings = function(prompt_bufnr, map)
 			actions.select_default:replace(function()
 				local selection = action_state.get_selected_entry()
-        if selection.col <= 0 then
-          selection.col = 1 -- minimum column index
+        if selection.col < 0 then
+          selection.col = 0 -- block negative column index
         end
 				actions.close(prompt_bufnr)
 				vim.api.nvim_set_current_buf(vim.fn.bufnr(selection.filename))
-				vim.api.nvim_win_set_cursor(0, { selection.lnum, selection.col - 1 })
+				vim.api.nvim_win_set_cursor(0, { selection.lnum, selection.col })
 			end)
 
 			actions.close:enhance({
