@@ -276,7 +276,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 						local r = s.range
 						if utils.is_position_in_range(sign.lnum - 1, r.start.line, r["end"].line) then
 							match_symbol = true
-							local mark = create_bookmark(s, sign.lnum, 0, sign_info[tostring(sign.id)] or "")
+							local mark = create_bookmark(s, sign.lnum, 1, sign_info[tostring(sign.id)] or "")
 							-- Fresh new bookmark, don't need to calibrate it again
 							mark.calibrated = true
 							-- The sign is created after creating/pasting, delete the sign info after
@@ -287,7 +287,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 
 					-- Create plain mark
 					if not match_symbol then
-						local mark = create_bookmark(nil, sign.lnum, 0, sign_info[tostring(sign.id)] or "")
+						local mark = create_bookmark(nil, sign.lnum, 1, sign_info[tostring(sign.id)] or "")
 						-- Fresh new bookmark, don't need to calibrate it again
 						mark.calibrated = true
 						-- The sign is created after creating/pasting, delete the sign info after
