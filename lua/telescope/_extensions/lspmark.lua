@@ -120,7 +120,7 @@ function M.lspmark(opts)
 			actions.select_default:replace(function()
 				local selection = action_state.get_selected_entry()
 				actions.close(prompt_bufnr)
-				vim.api.nvim_set_current_buf(vim.fn.bufnr(selection.filename))
+				vim.api.nvim_set_current_buf(vim.fn.bufnr(selection.filename, true))
 				vim.api.nvim_win_set_cursor(0, { selection.lnum, selection.col - 1 })
 			end)
 
