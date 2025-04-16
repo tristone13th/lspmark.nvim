@@ -85,112 +85,115 @@ function M.lspmark(opts)
 		},
 	})
 
-	pickers.new(opts, {
-		prompt_title = "Bookmarks",
-		finder = finders.new_table({
-			results = results,
-			entry_maker = function(entry)
-				local file_name = utils.get_file_name(entry.filename)
-				return {
-					display = function()
-						return display({
-							{ file_name },
-							{ entry.kind_str, entry.kind_hl_group },
-							{ entry.symbol },
-							{ entry.text },
-							{ entry.comment },
-						})
-					end,
-					ordinal = entry.comment .. entry.text .. entry.symbol .. entry.kind_str .. file_name,
-					filename = entry.filename,
-					lnum = entry.lnum,
-					col = entry.col,
-					kind = entry.kind,
-					symbol = entry.symbol,
-					offset = entry.offset,
-					text = entry.text,
-					comment = entry.comment,
-					id = entry.id,
-				}
-			end,
-		}),
-		previewer = previewers.vim_buffer_vimgrep.new(opts),
-		sorter = sorters.get_generic_fuzzy_sorter(),
-		attach_mappings = function(prompt_bufnr, map)
-			actions.select_default:replace(function()
-				local selection = action_state.get_selected_entry()
-        if selection.col < 0 then
-          selection.col = 0 -- block negative column index
-        end
-				actions.close(prompt_bufnr)
-
-				vim.api.nvim_set_current_buf(vim.fn.bufnr(selection.filename, true))
-				vim.api.nvim_win_set_cursor(0, { selection.lnum, selection.col })
-			end)
-
-			actions.close:enhance({
-				post = function()
-					bookmarks.display_bookmarks(0)
+	pickers
+		.new(opts, {
+			prompt_title = "Bookmarks",
+			finder = finders.new_table({
+				results = results,
+				entry_maker = function(entry)
+					local file_name = utils.get_file_name(entry.filename)
+					return {
+						display = function()
+							return display({
+								{ file_name },
+								{ entry.kind_str, entry.kind_hl_group },
+								{ entry.symbol },
+								{ entry.text },
+								{ entry.comment },
+							})
+						end,
+						ordinal = entry.comment .. entry.text .. entry.symbol .. entry.kind_str .. file_name,
+						filename = entry.filename,
+						lnum = entry.lnum,
+						col = entry.col,
+						kind = entry.kind,
+						symbol = entry.symbol,
+						offset = entry.offset,
+						text = entry.text,
+						comment = entry.comment,
+						id = entry.id,
+					}
 				end,
-			})
+			}),
+			previewer = previewers.vim_buffer_vimgrep.new(opts),
+			sorter = sorters.get_generic_fuzzy_sorter(),
+			attach_mappings = function(prompt_bufnr, map)
+				actions.select_default:replace(function()
+					local selection = action_state.get_selected_entry()
+					if selection.col < 0 then
+						selection.col = 0 -- block negative column index
+					end
+					actions.close(prompt_bufnr)
+					local nr = vim.fn.bufnr(selection.filename, true)
+					vim.api.nvim_buf_set_option(nr, "buflisted", true)
+					vim.api.nvim_set_current_buf(nr)
+					vim.api.nvim_win_set_cursor(0, { selection.lnum, selection.col })
+				end)
 
-			map("i", "<CR>", function()
-				actions.select_default()
-			end)
+				actions.close:enhance({
+					post = function()
+						bookmarks.display_bookmarks(0)
+					end,
+				})
 
-			map("n", "<CR>", function()
-				actions.select_default()
-			end)
+				map("i", "<CR>", function()
+					actions.select_default()
+				end)
 
-			map("n", "d", function()
-				local s = action_state.get_selected_entry()
-				local kinds = bookmarks.bookmarks[s.filename]
-				if not kinds then
-					print("Cannot find the mark under the cursor")
-					return
-				end
-				local symbols = kinds[s.kind]
-				if not symbols then
-					print("Cannot find the mark under the cursor")
-					return
-				end
+				map("n", "<CR>", function()
+					actions.select_default()
+				end)
 
-				local function helper(array)
-					local index = 1
-					for idx, mark in ipairs(array) do
-						if mark.id == s.id then
-							index = idx
-							break
+				map("n", "d", function()
+					local s = action_state.get_selected_entry()
+					local kinds = bookmarks.bookmarks[s.filename]
+					if not kinds then
+						print("Cannot find the mark under the cursor")
+						return
+					end
+					local symbols = kinds[s.kind]
+					if not symbols then
+						print("Cannot find the mark under the cursor")
+						return
+					end
+
+					local function helper(array)
+						local index = 1
+						for idx, mark in ipairs(array) do
+							if mark.id == s.id then
+								index = idx
+								break
+							end
 						end
+
+						table.remove(array, index)
+						utils.clear_empty_tables(bookmarks.bookmarks)
+						bookmarks.save_bookmarks()
+						local current_picker = action_state.get_current_picker(prompt_bufnr)
+						current_picker:delete_selection(function() end)
+						print("Selected entry deleted.")
 					end
 
-					table.remove(array, index)
-					utils.clear_empty_tables(bookmarks.bookmarks)
-					bookmarks.save_bookmarks()
-					local current_picker = action_state.get_current_picker(prompt_bufnr)
-					current_picker:delete_selection(function() end)
-					print("Selected entry deleted.")
-				end
-
-				if s.kind == bookmarks.plain_magic then
-					helper(symbols)
-				else
-					local symbol = symbols[s.symbol]
-					if not symbol then
-						print("Cannot find the mark under the cursor")
-						return
+					if s.kind == bookmarks.plain_magic then
+						helper(symbols)
+					else
+						local symbol = symbols[s.symbol]
+						if not symbol then
+							print("Cannot find the mark under the cursor")
+							return
+						end
+						local marks = symbol[tostring(s.offset)]
+						if not marks then
+							print("Cannot find the mark under the cursor")
+							return
+						end
+						helper(marks)
 					end
-					local marks = symbol[tostring(s.offset)]
-					if not marks then
-						print("Cannot find the mark under the cursor")
-						return
-					end
-					helper(marks)
-				end
-			end)
-			return true
-		end,
-	}):find()
+				end)
+				return true
+			end,
+		})
+		:find()
 end
 
 return require("telescope").register_extension({
