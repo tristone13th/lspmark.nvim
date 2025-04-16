@@ -119,9 +119,13 @@ function M.lspmark(opts)
 		attach_mappings = function(prompt_bufnr, map)
 			actions.select_default:replace(function()
 				local selection = action_state.get_selected_entry()
+        if selection.col < 0 then
+          selection.col = 0 -- block negative column index
+        end
 				actions.close(prompt_bufnr)
+
 				vim.api.nvim_set_current_buf(vim.fn.bufnr(selection.filename, true))
-				vim.api.nvim_win_set_cursor(0, { selection.lnum, selection.col - 1 })
+				vim.api.nvim_win_set_cursor(0, { selection.lnum, selection.col })
 			end)
 
 			actions.close:enhance({
@@ -129,6 +133,14 @@ function M.lspmark(opts)
 					bookmarks.display_bookmarks(0)
 				end,
 			})
+
+			map("i", "<CR>", function()
+				actions.select_default()
+			end)
+
+			map("n", "<CR>", function()
+				actions.select_default()
+			end)
 
 			map("n", "d", function()
 				local s = action_state.get_selected_entry()

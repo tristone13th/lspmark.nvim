@@ -373,14 +373,22 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 		M.save_bookmarks(bookmark_file)
 	end
 
+	local params
 	if async then
 		local clients = vim.lsp.get_clients({ bufnr = bufnr })
-		if vim.tbl_isempty(clients) then
+		local request = false
+		for _, client in ipairs(clients) do
+			if client.server_capabilities.documentFormattingProvider then
+				request = true
+				params = vim.lsp.util.make_position_params(0, client.offset_encoding)
+				break
+			end
+		end
+		if vim.tbl_isempty(clients) or not request then
 			-- Only calibrate the plain bookmarks,
 			-- this will delete all the lsp bookmarks.
 			helper({})
 		else
-			local params = vim.lsp.util.make_position_params()
 			vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(result)
 				-- When result arrive, we have moved to a new folder, so do nothing.
 				--bookmark_file is nil at first time.
@@ -400,22 +408,36 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 			end)
 		end
 	else
-		local result, err = vim.lsp.buf_request_sync(bufnr, "textDocument/documentSymbol", params, 1000)
-		if err then
-			helper({})
-			return
-		end
-		if not result or vim.tbl_isempty(result) then
-			helper({})
-			return
+		local clients = vim.lsp.get_clients({ bufnr = bufnr })
+		local request = false
+		for _, client in ipairs(clients) do
+			if client.server_capabilities.documentFormattingProvider then
+				request = true
+				params = vim.lsp.util.make_position_params(0, client.offset_encoding)
+				break
+			end
 		end
 
-		-- calibrate
-		for _, response in pairs(result) do
-			if response.result ~= nil then
-				helper(response.result)
-				-- Currently 1 client is enough
+		if not request then
+			helper({})
+		else
+			local result, err = vim.lsp.buf_request_sync(bufnr, "textDocument/documentSymbol", params, 1000)
+			if err then
+				helper({})
 				return
+			end
+			if not result or vim.tbl_isempty(result) then
+				helper({})
+				return
+			end
+
+			-- calibrate
+			for _, response in pairs(result) do
+				if response.result ~= nil then
+					helper(response.result)
+					-- Currently 1 client is enough
+					return
+				end
 			end
 		end
 	end
