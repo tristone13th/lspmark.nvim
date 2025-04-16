@@ -123,7 +123,8 @@ function M.lspmark(opts)
           selection.col = 0 -- block negative column index
         end
 				actions.close(prompt_bufnr)
-				vim.api.nvim_set_current_buf(vim.fn.bufnr(selection.filename))
+
+				vim.api.nvim_set_current_buf(vim.fn.bufnr(selection.filename, true))
 				vim.api.nvim_win_set_cursor(0, { selection.lnum, selection.col })
 			end)
 
