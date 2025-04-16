@@ -732,6 +732,7 @@ end
 
 function M.paste_text()
 	if not M.yanked then
+		-- From dd or (v -> select -> d)
 		if M.text ~= nil then
 			local cursor = vim.api.nvim_win_get_cursor(0)
 			local bufnr = vim.api.nvim_get_current_buf()
@@ -752,6 +753,7 @@ function M.paste_text()
 			M.lsp_calibrate_bookmarks(bufnr, true, M.bookmark_file)
 		end
 	else
+		-- From yy or (v -> select -> y)
 		vim.cmd("normal! p")
 	end
 end

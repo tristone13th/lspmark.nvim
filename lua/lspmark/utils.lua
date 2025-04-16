@@ -62,7 +62,7 @@ function M.get_text(start_line, end_line, start_c, end_c, bufnr)
 	local lines = vim.api.nvim_buf_get_lines(bufnr, start_line - 1, end_line, false)
 	if #lines == 0 then
 		vim.notify("Cannot get selected range of texts, please check if the buffer is unloaded.", vim.log.levels.ERROR)
-		return ""
+		return {}
 	end
 	lines[1] = string.sub(lines[1], start_c, -1)
 	if n_lines == 1 then
