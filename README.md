@@ -127,6 +127,13 @@ vim.api.nvim_create_autocmd({ "DirChanged" }, {
 
 `LspMarkComment`: The highlight group for the virtual text of the comment.
 
+## For Developers
+
+There are a bunch of comments along with the codes, so it shouldn't be difficult to understand the code. The following concepts in the comments should be clarified:
+
+- Mark: It is an abstract concept that means the line you want to put the mark.
+- Sign: It means the sign displayed at the left of each line marked.
+
 ## FAQ
 
 <details>
