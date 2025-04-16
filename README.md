@@ -133,6 +133,8 @@ There are a bunch of comments along with the codes, so it shouldn't be difficult
 
 - Mark: It is an abstract concept that means the line you want to put the mark.
 - Sign: It means the sign displayed at the left of each line marked.
+- Symbol: An LSP symbol covers a range of codes, it may have multiple marks in different offsets.
+- Offset: A mark's offset relative to the start of a symbol.
 
 ## FAQ
 

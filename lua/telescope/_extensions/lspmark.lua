@@ -133,6 +133,14 @@ function M.lspmark(opts)
 				end,
 			})
 
+			map("i", "<CR>", function()
+				actions.select_default()
+			end)
+
+			map("n", "<CR>", function()
+				actions.select_default()
+			end)
+
 			map("n", "d", function()
 				local s = action_state.get_selected_entry()
 				local kinds = bookmarks.bookmarks[s.filename]
