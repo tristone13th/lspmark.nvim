@@ -152,6 +152,11 @@ function M.lspmark(opts)
 
 				map("n", "d", function()
 					local s = action_state.get_selected_entry()
+					-- 0 bookmarks
+					if not s then
+						return
+					end
+
 					local kinds = bookmarks.bookmarks[s.filename]
 					if not kinds then
 						print("Cannot find the mark under the cursor")
