@@ -173,19 +173,20 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 	local function helper(result)
 		-- Calibrate each mark's information (mainly offset) using sign information.
 		--
-		-- If a sign has a corresponding mark, then calibrate the lsp/plain mark with the sign's info
+		-- Case 1: If a sign has a corresponding mark, then calibrate the lsp/plain mark with the sign's info
 		-- since the sign is always up-to-date (Such as when the buffer is modified).
 		--
-		-- If a sign doesn't have a corresponding mark, then create the lsp/plain mark.
-		-- This relates to the case we create/paste the text with marks included.
+		-- Case 2: If a sign doesn't have a corresponding mark, then create the lsp/plain mark.
+		-- This relates to the case we create new marks/paste the text with marks included.
 		local extmarks = vim.fn.sign_getplaced(bufnr, { group = "lspmark" })
 		for _, marks in ipairs(extmarks) do
 			for _, sign in ipairs(marks.signs) do
 				local matched = false
+				-- Case 1: Find the corresponding mark for a sign and calibrate it.
 				if M.bookmarks[file_name] ~= nil then
 					for kind, kind_symbols in pairs(M.bookmarks[file_name]) do
-						-- First calibrate the plain mark which may not correct due to modified file
 						if kind == M.plain_magic then
+							-- First calibrate the plain mark which may not correct due to modified file
 							for i = #kind_symbols, 1, -1 do
 								local mark = kind_symbols[i]
 								if mark.id == sign.id then
@@ -195,6 +196,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 								end
 							end
 						else
+							-- Second, calibrate LSP marks
 							for _, name_symbols in pairs(kind_symbols) do
 								for _, bookmarks in pairs(name_symbols) do
 									-- We should iterate reversely since removing entry
@@ -202,11 +204,13 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 									for i = #bookmarks, 1, -1 do
 										local mark = bookmarks[i]
 										if mark.id == sign.id then
+											local symbol = nil
 											for _, s in ipairs(result) do
 												if s.location then -- SymbolInformation type
 													s.range = s.location.range
 												end
 												local r = s.range
+
 												if
 													utils.is_position_in_range(
 														sign.lnum - 1,
@@ -214,44 +218,52 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 														r["end"].line
 													)
 												then
-													matched = true
-													local new_offset = sign.lnum - r.start.line - 1
-													table.remove(bookmarks, i)
-													local l3 = ensure_path_valid(file_name, s.kind, s.name, new_offset)
-													-- Don't set the mark.id to sign.id, leave it since otherwise that may
-													-- cause this mark be processed mutliple times. The mark.id will be set
-													-- when displaying.
-													table.insert(l3[tostring(new_offset)], {
-														range = {
-															r.start.line,
-															r["end"].line,
-															r.start.character,
-															r["end"].character,
-														},
-														col = mark.col,
-														text = vim.api.nvim_buf_get_lines(
-															bufnr,
-															sign.lnum - 1,
-															sign.lnum,
-															false
-														)[1],
-														comment = mark.comment,
-														details = s.details,
-														symbol_text = utils.remove_blanks(
-															table.concat(
-																utils.get_text(
-																	r.start.line + 1,
-																	r["end"].line + 1,
-																	r.start.character,
-																	r["end"].character,
-																	bufnr
-																),
-																""
-															)
-														),
-														calibrated = true,
-													})
+													if not symbol or r.start.line >= symbol.range.start.line then
+														matched = true
+														symbol = s
+													end
 												end
+											end
+
+											if matched then
+												local s = symbol
+												local r = s.range
+												local new_offset = sign.lnum - r.start.line - 1
+												table.remove(bookmarks, i)
+												local l3 = ensure_path_valid(file_name, s.kind, s.name, new_offset)
+												-- Don't set the mark.id to sign.id, leave it since otherwise that may
+												-- cause this mark be processed mutliple times. The mark.id will be set
+												-- when displaying.
+												table.insert(l3[tostring(new_offset)], {
+													range = {
+														r.start.line,
+														r["end"].line,
+														r.start.character,
+														r["end"].character,
+													},
+													col = mark.col,
+													text = vim.api.nvim_buf_get_lines(
+														bufnr,
+														sign.lnum - 1,
+														sign.lnum,
+														false
+													)[1],
+													comment = mark.comment,
+													details = s.details,
+													symbol_text = utils.remove_blanks(
+														table.concat(
+															utils.get_text(
+																r.start.line + 1,
+																r["end"].line + 1,
+																r.start.character,
+																r["end"].character,
+																bufnr
+															),
+															""
+														)
+													),
+													calibrated = true,
+												})
 											end
 										end
 									end
@@ -262,12 +274,15 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 				end
 				-- Always keep the bookmarks in clean state
 				utils.clear_empty_tables(M.bookmarks)
-				-- This sign is created when pasting/creating, create a new bookmark for it
+
+				-- Case 2:
+				-- This sign is created when pasting/creating, create a new bookmark for it.
 				-- Althrough after this sign is processed we won't hit the mark.id == sign.id case,
 				-- we still shouldn't assign the mark.id with sign.id since we better to keep it consistent
 				if not matched then
 					-- true create a lsp mark, else create a plain mark
 					local match_symbol = false
+					local symbol = nil
 					-- Try best to create a lsp mark, fallback to a plain mark
 					for _, s in ipairs(result) do
 						if s.location then -- SymbolInformation type
@@ -276,17 +291,23 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 						local r = s.range
 						if utils.is_position_in_range(sign.lnum - 1, r.start.line, r["end"].line) then
 							match_symbol = true
-							local mark = create_bookmark(s, sign.lnum, 0, sign_info[tostring(sign.id)] or "")
-							-- Fresh new bookmark, don't need to calibrate it again
-							mark.calibrated = true
-							-- The sign is created after creating/pasting, delete the sign info after
-							-- the bookmark is created.
-							sign_info[tostring(sign.id)] = nil
+							-- Always select the best fit symbol
+							if not symbol or r.start.line >= symbol.range.start.line then
+								symbol = s
+							end
 						end
 					end
 
-					-- Create plain mark
-					if not match_symbol then
+					if match_symbol then
+						-- Create LSP mark
+						local mark = create_bookmark(symbol, sign.lnum, 0, sign_info[tostring(sign.id)] or "")
+						-- Fresh new bookmark, don't need to calibrate it again
+						mark.calibrated = true
+						-- The sign is created after creating/pasting, delete the sign info after
+						-- the bookmark is created.
+						sign_info[tostring(sign.id)] = nil
+					else
+						-- Create plain mark
 						local mark = create_bookmark(nil, sign.lnum, 0, sign_info[tostring(sign.id)] or "")
 						-- Fresh new bookmark, don't need to calibrate it again
 						mark.calibrated = true
@@ -613,6 +634,7 @@ function M.toggle_bookmark(opts)
 	if id ~= false then
 		delete_bookmark()
 	else
+		-- First create the sign, then create the mark based on the sign information.
 		ensure_sign_defined()
 		id = vim.fn.sign_place(0, icon_group, sign_name, bufnr, { lnum = line, priority = 100 })
 		if with_comment then

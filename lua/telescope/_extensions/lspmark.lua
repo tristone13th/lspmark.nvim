@@ -120,6 +120,12 @@ function M.lspmark(opts)
 			attach_mappings = function(prompt_bufnr, map)
 				actions.select_default:replace(function()
 					local selection = action_state.get_selected_entry()
+
+					-- 0 bookmarks
+					if not selection then
+						return
+					end
+
 					if selection.col < 0 then
 						selection.col = 0 -- block negative column index
 					end
