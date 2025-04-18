@@ -98,6 +98,7 @@ local function create_bookmark(symbol, line, col, with_comment)
 	return mark
 end
 
+-- Find a corresponding LSP symbol for the mark
 local function match(lsp_symbols, mark)
 	if #lsp_symbols == 1 then
 		return 1
@@ -148,10 +149,16 @@ local function match(lsp_symbols, mark)
 end
 
 -- 2 phases calibration:
---   1. Precise calibration: calibrate each mark's offset and other stuffs using
+--
+--   1. Precise calibration (rely on signs): Calibrate each mark's offset and other stuffs using
 --      sign/symbol information which is up-to-date.
---   2. Rough calibration: calibrate each mark's other stuffs only using LSP symbol
+--
+--      1. If a sign has corresponding mark, calibrate the mark based on the sign's information;
+--      2. If not, create the mark based on the sign's information.
+--
+--   2. Rough calibration (rely on symbols): Calibrate each mark's other stuffs only using LSP symbol
 --      information when it doesn't have a corresponding sign.
+--
 -- Be careful that sometimes you call this function in a directory (such as when bufleave)
 -- but the async result returns in another directory. Current we use bookmark_file to
 -- identify this.
@@ -173,8 +180,8 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 	local function helper(result)
 		-- Calibrate each mark's information (mainly offset) using sign information.
 		--
-		-- Case 1: If a sign has a corresponding mark, then calibrate the lsp/plain mark with the sign's info
-		-- since the sign is always up-to-date (Such as when the buffer is modified).
+		-- Case 1: If a sign has a corresponding mark (based on their id), then calibrate the lsp/plain mark with the sign's info
+		-- since the sign is always up-to-date (Signs will always be up-to-date even the buffer is modified).
 		--
 		-- Case 2: If a sign doesn't have a corresponding mark, then create the lsp/plain mark.
 		-- This relates to the case we create new marks/paste the text with marks included.
@@ -318,7 +325,7 @@ function M.lsp_calibrate_bookmarks(bufnr, async, bookmark_file)
 				end
 			end
 		end
-		-- Fallback to calibrate each mark using LSP information.
+		-- Fallback to calibrate each mark using LSP symbols' information.
 		--
 		-- Not all bookmarks will get calibrated in the first phase using signs,
 		-- if we **format** a buffer then all the signs will get lost. thus we need to
@@ -489,6 +496,7 @@ local function get_mark_from_id(id)
 	end
 end
 
+-- Delete a mark based on id
 local function delete_id(id)
 	local res = get_mark_from_id(id)
 	if res ~= nil then
@@ -754,7 +762,9 @@ end
 
 function M.paste_text()
 	if not M.yanked then
-		-- From dd or (v -> select -> d)
+		-- Only from:
+		--   1. delete_line() (dd) or,
+		--   2. delete_visual_selection() (v -> select -> d)
 		if M.text ~= nil then
 			local cursor = vim.api.nvim_win_get_cursor(0)
 			local bufnr = vim.api.nvim_get_current_buf()
@@ -782,6 +792,7 @@ end
 
 function M.delete_visual_selection()
 	M.marks_in_selection = {}
+	M.text = nil
 	local s_start = vim.fn.getpos("'<")
 	local s_end = vim.fn.getpos("'>")
 	M.text = get_range_texts(s_start[2], s_end[2], s_start[3], s_end[3])
@@ -792,6 +803,7 @@ end
 
 function M.delete_line()
 	M.marks_in_selection = {}
+	M.text = nil
 	-- get all bookmarks in the selection
 	local cursor = vim.api.nvim_win_get_cursor(0)
 	M.text = get_range_texts(cursor[1], cursor[1], 1, 2147483647)
@@ -816,6 +828,7 @@ function M.setup()
 		callback = on_buf_write_post,
 		pattern = { "*" },
 	})
+	-- d$, ciw, diw etc., will all be affected, not just yanking.
 	vim.api.nvim_create_autocmd({ "TextYankPost" }, {
 		callback = function()
 			M.yanked = true
