@@ -512,6 +512,7 @@ local function create_right_aligned_highlight(text, offset)
 	return target_col
 end
 
+--- Cancel all placed signs, and re-place them with the latest bookmarks info.
 function M.display_bookmarks(bufnr)
 	if bufnr == 0 then
 		bufnr = vim.api.nvim_get_current_buf()
@@ -697,12 +698,17 @@ end
 local function on_buf_enter(event)
 	-- The reason why we calibrate the bookmarks after entering rather than before leaving
 	-- a buffer is that we don't want to get the modified but not saved file calibrated too early,
-	-- which may cause incorret calibration when we force exit neoivm without saving the modfied
+	-- which may cause incorrect calibration when we force exit Neovim without saving the modified
 	-- buffer back to the disk.
 	if vim.api.nvim_get_option_value("modified", { buf = event.buf }) then
 		M.lsp_calibrate_bookmarks(event.buf, false, M.bookmark_file)
 	end
-	M.display_bookmarks(event.buf)
+	-- We don't need to call display_bookmarks() here, because:
+	--
+	-- 1. The bookmarks will be displayed in lsp_calibrate_bookmarks(), and
+	-- 2. We don't need to display bookmarks again after they have been displayed, the signs will last
+	--    even if we switch the buffer in-and-out. Display twice will cause some errors caused by racing
+	--    and timing (e.g., mis-placement of bookmark comments).
 end
 
 local function on_buf_write_post(event)
