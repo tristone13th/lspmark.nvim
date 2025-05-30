@@ -505,12 +505,12 @@ local function delete_id(id)
 	utils.clear_empty_tables(M.bookmarks)
 end
 
-local function create_right_aligned_highlight(text, offset)
-	local res = vim.fn.getwininfo(vim.api.nvim_get_current_win())[1]
-	local line_width = vim.api.nvim_win_get_width(0) - res.textoff
-	local target_col = line_width - string.len(text) + offset
-	return target_col
-end
+-- local function create_right_aligned_highlight(text, offset)
+-- 	local res = vim.fn.getwininfo(vim.api.nvim_get_current_win())[1]
+-- 	local line_width = vim.api.nvim_win_get_width(0) - res.textoff
+-- 	local target_col = line_width - string.len(text) + offset
+-- 	return target_col
+-- end
 
 --- Cancel all placed signs, and re-place them with the latest bookmarks info.
 function M.display_bookmarks(bufnr)
@@ -536,8 +536,8 @@ function M.display_bookmarks(bufnr)
 					mark.id = id
 
 					local comment = utils.string_truncate(mark.comment, 15)
-					local col = create_right_aligned_highlight(comment, -1)
-					virt_text_opts.virt_text_win_col = col
+					virt_text_opts.virt_text_pos = "right_align"
+					virt_text_opts.hl_mode = "combine"
 					virt_text_opts.virt_text[1][1] = comment
 					vim.api.nvim_buf_set_extmark(bufnr, ns_id, mark.line - 1, 0, virt_text_opts)
 				end
@@ -556,8 +556,8 @@ function M.display_bookmarks(bufnr)
 							mark.id = id
 
 							local comment = utils.string_truncate(mark.comment, 15)
-							local col = create_right_aligned_highlight(comment, -1)
-							virt_text_opts.virt_text_win_col = col
+							virt_text_opts.virt_text_pos = "right_align"
+							virt_text_opts.hl_mode = "combine"
 							virt_text_opts.virt_text[1][1] = comment
 							vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, 0, virt_text_opts)
 						end
