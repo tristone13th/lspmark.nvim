@@ -16,9 +16,11 @@ local icon = "->"
 local ns_id = vim.api.nvim_create_namespace("lspmark")
 local virt_text_opts = {
 	virt_text = { { "", "LspMarkComment" } },
-	virt_text_pos = "overlay",
+	virt_text_pos = "right_align",
 	hl_mode = "combine",
 	undo_restore = true,
+	-- Set a huge number, don't render before the scrollbar.
+	priority = 65535,
 }
 
 -- SymbolInformation type will have symbol.location.range
@@ -536,8 +538,6 @@ function M.display_bookmarks(bufnr)
 					mark.id = id
 
 					local comment = utils.string_truncate(mark.comment, 15)
-					virt_text_opts.virt_text_pos = "right_align"
-					virt_text_opts.hl_mode = "combine"
 					virt_text_opts.virt_text[1][1] = comment
 					vim.api.nvim_buf_set_extmark(bufnr, ns_id, mark.line - 1, 0, virt_text_opts)
 				end
@@ -556,8 +556,6 @@ function M.display_bookmarks(bufnr)
 							mark.id = id
 
 							local comment = utils.string_truncate(mark.comment, 15)
-							virt_text_opts.virt_text_pos = "right_align"
-							virt_text_opts.hl_mode = "combine"
 							virt_text_opts.virt_text[1][1] = comment
 							vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, 0, virt_text_opts)
 						end
