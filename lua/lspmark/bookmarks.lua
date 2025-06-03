@@ -16,7 +16,7 @@ local icon = "->"
 local ns_id = vim.api.nvim_create_namespace("lspmark")
 local virt_text_opts = {
 	virt_text = { { "", "LspMarkComment" } },
-	virt_text_pos = "right_align",
+	virt_text_pos = "eol_right_align",
 	hl_mode = "combine",
 	undo_restore = true,
 	-- Set a huge number, don't render before the scrollbar.
