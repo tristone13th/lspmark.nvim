@@ -700,13 +700,10 @@ local function on_buf_enter(event)
 	-- buffer back to the disk.
 	if vim.api.nvim_get_option_value("modified", { buf = event.buf }) then
 		M.lsp_calibrate_bookmarks(event.buf, false, M.bookmark_file)
+	else
+		-- Always keep the displayed bookmarks updated.
+		M.display_bookmarks(0)
 	end
-	-- We don't need to call display_bookmarks() here, because:
-	--
-	-- 1. The bookmarks will be displayed in lsp_calibrate_bookmarks(), and
-	-- 2. We don't need to display bookmarks again after they have been displayed, the signs will last
-	--    even if we switch the buffer in-and-out. Display twice will cause some errors caused by racing
-	--    and timing (e.g., mis-placement of bookmark comments).
 end
 
 local function on_buf_write_post(event)
