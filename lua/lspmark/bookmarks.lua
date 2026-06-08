@@ -22,6 +22,7 @@ local virt_text_opts = {
 	-- Set a huge number, don't render before the scrollbar.
 	priority = 65535,
 }
+local comment_prompt = "Input new comment: "
 
 -- SymbolInformation type will have symbol.location.range
 -- rather than symbol.range, keep them consistent.
@@ -614,7 +615,7 @@ local function modify_comment(id)
 	if res ~= nil then
 		default_input = res.marks[res.index].comment
 	end
-	vim.ui.input({ prompt = "Input new comment: ", default = default_input }, function(input)
+	vim.ui.input({ prompt = comment_prompt, default = default_input }, function(input)
 		-- Modify the comment on a sign that just pasted currently doesn't have a mark
 		sign_info[tostring(id)] = input or ""
 
@@ -633,7 +634,7 @@ function M.toggle_bookmark(opts)
 	end
 
 	if vim.api.nvim_get_option_value("modified", { buf = bufnr }) then
-		M.lsp_calibrate_bookmarks(nil, false, M.bookmark_file)
+		M.lsp_calibrate_bookmarks(bufnr, false, M.bookmark_file)
 	end
 
 	local line = vim.api.nvim_win_get_cursor(0)[1]
@@ -641,13 +642,19 @@ function M.toggle_bookmark(opts)
 	if id ~= false then
 		delete_bookmark()
 	else
-		-- First create the sign, then create the mark based on the sign information.
-		ensure_sign_defined()
-		id = vim.fn.sign_place(0, icon_group, sign_name, bufnr, { lnum = line, priority = 100 })
-		if with_comment then
-			modify_comment(id)
+		local function new_bookmark(input)
+			ensure_sign_defined()
+			id = vim.fn.sign_place(0, icon_group, sign_name, bufnr, { lnum = line, priority = 100 })
+			sign_info[tostring(id)] = input or ""
+			M.lsp_calibrate_bookmarks(bufnr, false, M.bookmark_file)
 		end
-		M.lsp_calibrate_bookmarks(nil, false, M.bookmark_file)
+
+		if with_comment then
+			vim.ui.input({ prompt = comment_prompt }, new_bookmark)
+			return
+		end
+
+		new_bookmark()
 	end
 end
 
