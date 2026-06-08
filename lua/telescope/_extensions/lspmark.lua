@@ -6,9 +6,41 @@ local finders = require("telescope.finders")
 local previewers = require("telescope.previewers")
 local sorters = require("telescope.sorters")
 local bookmarks = require("lspmark.bookmarks")
+local config = require("lspmark.config")
 local highlight = require("telescope._extensions.highlight")
 local entry_display = require("telescope.pickers.entry_display")
 local utils = require("lspmark.utils")
+
+local function get_field_width(field, widths)
+	local width = widths[field]
+	local max_width = config.options.telescope.entry_fields.max_widths[field]
+
+	return function(_, max_columns)
+		return math.min(width, math.floor(max_width * max_columns))
+	end
+end
+
+local function display_items(widths)
+	return vim.iter(config.options.telescope.entry_fields.order)
+		:map(function(field)
+			return { width = get_field_width(field, widths) }
+		end)
+		:totable()
+end
+
+local function display_values(entry, file_name)
+	return vim.iter(config.options.telescope.entry_fields.order)
+		:map(function(field)
+			if field == "file" then
+				return { file_name }
+			elseif field == "kind" then
+				return { entry.kind_str, entry.kind_hl_group }
+			else
+				return { entry[field] }
+			end
+		end)
+		:totable()
+end
 
 function M.lspmark(opts)
 	opts = opts or {}
@@ -76,13 +108,13 @@ function M.lspmark(opts)
 
 	local display = entry_display.create({
 		separator = "  ",
-		items = {
-			{ width = max_file_name_len },
-			{ width = max_kind_len },
-			{ width = 0.2 },
-			{ width = 0.3 },
-			{ remaining = true },
-		},
+		items = display_items({
+			file = max_file_name_len,
+			kind = max_kind_len,
+			symbol = max_symbol_len,
+			text = max_line_len,
+			comment = max_comment_len,
+		}),
 	})
 
 	pickers
@@ -94,13 +126,7 @@ function M.lspmark(opts)
 					local file_name = utils.get_file_name(entry.filename)
 					return {
 						display = function()
-							return display({
-								{ file_name },
-								{ entry.kind_str, entry.kind_hl_group },
-								{ entry.symbol },
-								{ entry.text },
-								{ entry.comment },
-							})
+							return display(display_values(entry, file_name))
 						end,
 						ordinal = entry.comment .. entry.text .. entry.symbol .. entry.kind_str .. file_name,
 						filename = entry.filename,
