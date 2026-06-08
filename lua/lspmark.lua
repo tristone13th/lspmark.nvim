@@ -1,6 +1,8 @@
 local M = {}
 
-function M.setup()
+---@param opts? lspmark.Options
+function M.setup(opts)
+	require("lspmark.config").setup(opts)
 	require("lspmark.bookmarks").setup()
 end
 

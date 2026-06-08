@@ -121,6 +121,28 @@ vim.api.nvim_create_autocmd({ "DirChanged" }, {
 })
 ```
 
+## Configuration
+
+You can pass customized options to the `setup` function:
+
+```lua
+---@type lspmark.Options
+local opts = {
+  telescope = {
+    entry_fields = {
+      order = { "comment", "file", "kind", "symbol" },
+      max_widths = {
+        comment = 0.4,
+      },
+    },
+  },
+}
+
+require("lspmark").setup(opts)
+```
+
+Supplied options are deep-merged with the [defaults](lua/lspmark/config.lua).
+
 ## Highlights
 
 `LspMark`: The highlight group for the sign at left side.
@@ -162,4 +184,3 @@ The symbols in LSP could be considered as the basic logical element for coding. 
 [^2]: "Project-wise" means the bookmarks are organized according to the cwd (project).
 [^3]: "Persistent" means the bookmarks will be saved to file so they won't be lost when nvim is opened next time.
 [^4]: "LSP" means we store each bookmark's information associated with their LSP symbol.
-
